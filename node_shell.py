@@ -100,15 +100,16 @@ class NodeHist:
         if self.node_history_pointer < -1:
             self.node_history_pointer += 1
 
-    def show_hist(self):
+    def show_hist(self, cmd_shell=None):
         """Print the history of loaded nodes"""
+        output = cmd_shell.stdout if cmd_shell else None
         n_hist = len(self.node_history)
         current_node = n_hist + self.node_history_pointer
         for i, hist in enumerate(self.node_history):
             if i != current_node:
-                print(hist[1])
+                print(hist[1], file=output)
             else:
-                print(hist[1], '   <--- We are here')
+                print(hist[1], '   <--- We are here', file=output)
 
 
 class AiiDANodeShell(cmd2.Cmd):
@@ -239,6 +240,39 @@ class AiiDANodeShell(cmd2.Cmd):
             return
         for key, val in extras.items():
             print('- {}: {}'.format(key, pformat(val)))
+
+    report_args = cmd2.Cmd2ArgumentParser()
+    report_args.add_argument('--levelname', '-l', type=str, default='REPORT')
+    report_args.add_argument('--max-depth',
+                             '-m',
+                             type=int,
+                             default=None,
+                             help='Limit the number of levels to be printed')
+    report_args.add_argument(
+        '--indent-size',
+        '-i',
+        type=int,
+        default=2,
+        help='Set the number of spaces to indent each level by')
+
+    @cmd2.with_argparser(report_args)
+    def do_report(self, arg):  # pylint: disable=unused-argument
+        """Show the report, if the node is a ProcessNode"""
+        from aiida.cmdline.utils.common import get_calcjob_report, get_workchain_report, get_process_function_report
+        from aiida.orm import CalcJobNode, WorkChainNode, CalcFunctionNode, WorkFunctionNode
+
+        process = self._current_node
+        if isinstance(process, CalcJobNode):
+            print(get_calcjob_report(process), file=self.stdout)
+        elif isinstance(process, WorkChainNode):
+            print(
+                get_workchain_report(process, arg.levelname, arg.indent_size,
+                                     arg.max_depth), file=self.stdout)
+        elif isinstance(process, (CalcFunctionNode, WorkFunctionNode)):
+            print(get_process_function_report(process), file=self.stdout)
+        else:
+            print('Nothing to show for node type {}'.format(
+                process.__class__), file=self.stdout)
 
     def extras_choices_method(self):
         """Method that returns all possible values for the 'extras' command, used for tab-completion."""
