@@ -1,0 +1,15 @@
+alias create bk backward
+alias create fw forward
+alias create vpl !verdi process list
+alias create vplp !verdi process list -P pk process_label label state scheduler_state
+alias create vcg !verdi calcjob gotocomputer
+alias create vpr !verdi process report
+alias create vp !verdi process
+alias create vco !verdi calcjob outputcat
+alias create vci !verdi calcjob inputcat
+alias create vdstart !verdi daemon start
+alias create vdstop !verdi daemon stop
+alias create vds !verdi daemon status
+alias create vdl !verdi daemon logshow
+
+
