@@ -403,6 +403,10 @@ class AiiDANodeShell(cmd2.Cmd):
                                             incoming.link_label,
                                             incoming.node.pk))
         else:
+            if arg.follow >= len(incomings) or arg.follow < 0:
+                print("Error: invalid link id {}".format(arg.follow))
+                return
+
             next_pk = incomings[arg.follow].node.pk
             self.do_load(next_pk)
 
@@ -430,6 +434,9 @@ class AiiDANodeShell(cmd2.Cmd):
                                             outgoing.link_label,
                                             outgoing.node.pk))
         else:
+            if arg.follow >= len(outgoings) or arg.follow < 0:
+                print("Error: invalid link id {}".format(arg.follow))
+                return
             next_pk = outgoings[arg.follow].node.pk
             self.do_load(next_pk)
 

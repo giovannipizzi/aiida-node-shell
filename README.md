@@ -13,7 +13,7 @@ and their attributes, extras and files in the repository.
 This is facilitated by a very fast interface. Indeed:
 
 - nodes are pre-loaded and multiple commands act by default on the "current node"
-- tab completion if *very* fast (ms vs a few hundresd of ms in `verdi`, since the database environment
+- tab completion is *very* fast (ms vs a few hundresd of ms in `verdi`, since the database environment
   and connections are setup only once when starting the shell.
 - tab completion is more customisable, e.g. showing the type of incoming/outgoing links together with the
   value to complete when inspecting links (commands `in` and `out`), or can properly browse directory and files
@@ -80,17 +80,17 @@ The shell by default has no preloaded node, and the shell shows just the current
 
 - Inspect all nodes that are incoming into the current node with the `in` command, showing the link type, the link label and the PK of the node. **Reminder**: you can jump to a node using the `load <PK>` command, making it easy to browse the graph. The output looks like:
     ```
-    - INPUT_CALC (settings) -> 1282
-    - INPUT_CALC (structure) -> 1211
-    - INPUT_CALC (pseudo_Al) -> 1527
-    - INPUT_CALC (code) -> 631
-    - INPUT_CALC (parameters) -> 1281
-    - INPUT_CALC (pseudo_Os) -> 1335
-    - INPUT_CALC (kpoints) -> 1197
+    # Link 0 - INPUT_CALC (settings) -> 1282
+    # Link 1 - INPUT_CALC (structure) -> 1211
+    # Link 2 - INPUT_CALC (pseudo_Al) -> 1527
+    # Link 3 - INPUT_CALC (code) -> 631
+    # Link 4 - INPUT_CALC (parameters) -> 1281
+    # Link 5 - INPUT_CALC (pseudo_Os) -> 1335
+    # Link 6 - INPUT_CALC (kpoints) -> 1197
     ```
 
 - Similarly, you can inspect outgoing nodes with `out`. Both for `in` and `out`, you can add a `-t` option to limit results to only one link type.
-
+- Note that the links are labelld by numbers. If you pass `-f <link id>` argument to the `in` command, it will bring you to the node connected by the link.
 - Browse the folders and files in the repository. You can check list files using `repo_ls`: 
 
     ```
@@ -119,6 +119,8 @@ The shell by default has no preloaded node, and the shell shows just the current
     ```   
   You can even redirect to file on your computer using `repo_cat aiida.in > test.txt` (and you can then show the file with bash commands by prepending with `!`, see also below): `!ls -l test.txt`, or `!cat test.txt`.
 
+- The report command prints the *report* for a process. It can be used for quick inspection of complex workchains.
+- The `show_hist` command shows a list the visited nodes, and you can quickly go back and forth usnig the `backward` and `forward` commands.  **NOTE** These commands may be renamed later.
 - There are also a set of useful things that are enabled by the `cmd2` library:
   - prepend a command with `!` to run in bash, for instance `!ls` to list the files in the current directory
   - you can run python commands with `run_pyscript`, or prepend by `@` (you can check all shortcuts with the `shortcuts` command)
@@ -134,6 +136,14 @@ The shell by default has no preloaded node, and the shell shows just the current
     ```
 
   to have the `rls` and `rcat` commands always available.
+  Note that you can also create alias for shell commands, such as
+
+    ```
+    alias create vplp !verdi process list -P pk process_label label state scheduler_state
+    ```
+
+  to quick interaction with `verdi`.
+  An example `.aiidashellrc` file is provided in the repository.
 
 ## Current status of the code and feedback
 I believe that the current code is already very useful, but it must be considered a first draft, to allow people to test
