@@ -376,6 +376,11 @@ class AiiDANodeShell(cmd2.Cmd):
                              help='Filter by link type',
                              choices=LINK_TYPES)
 
+    link_parser.add_argument('-f',
+                             '--follow',
+                             help='Follow this link to the next node',
+                             type=int)
+
     @needs_node
     @cmd2.with_argparser(link_parser)
     def do_in(self, arg):
@@ -392,10 +397,14 @@ class AiiDANodeShell(cmd2.Cmd):
         if not incomings:
             print("No incoming links{}".format(type_filter_string))
             return
-        for incoming in incomings:
-            print("- {} ({}) -> {}".format(incoming.link_type.value.upper(),
-                                           incoming.link_label,
-                                           incoming.node.pk))
+        if arg.follow is None:
+            for ilink, incoming in enumerate(incomings):
+                print("Link #{} - {} ({}) -> {}".format(ilink, incoming.link_type.value.upper(),
+                                            incoming.link_label,
+                                            incoming.node.pk))
+        else:
+            next_pk = incomings[arg.follow].node.pk
+            self.do_load(next_pk)
 
     @needs_node
     @cmd2.with_argparser(link_parser)
@@ -415,10 +424,14 @@ class AiiDANodeShell(cmd2.Cmd):
         if not outgoings:
             print("No outgoing links{}".format(type_filter_string))
             return
-        for outgoing in outgoings:
-            print("- {} ({}) -> {}".format(outgoing.link_type.value.upper(),
-                                           outgoing.link_label,
-                                           outgoing.node.pk))
+        if arg.follow is None:
+            for ilink, outgoing in enumerate(outgoings):
+                print("Link #{} - {} ({}) -> {}".format(ilink, outgoing.link_type.value.upper(),
+                                            outgoing.link_label,
+                                            outgoing.node.pk))
+        else:
+            next_pk = outgoings[arg.follow].node.pk
+            self.do_load(next_pk)
 
     @needs_node
     @with_default_argparse
