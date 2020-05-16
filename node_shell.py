@@ -18,11 +18,13 @@ import functools
 from datetime import datetime
 import pytz
 import sys
+from traceback import print_exc
 
 from ago import human
 import click
 
 from aiida.common.links import LinkType
+from aiida.cmdline.commands.cmd_verdi import verdi
 from aiida.orm.utils.repository import FileType
 from pprint import pformat
 
@@ -589,6 +591,24 @@ class AiiDANodeShell(cmd2.Cmd):
     #    #line = line.lower()
     #    return line
 
+    def do_verdi(self, arg):
+        """Run verdi commands using the current profile"""
+        output = self.stdout
+
+        # Here I force verdi to use the current profile, otherwise the
+        # command won't work for the node shell launched with non-default profile
+        verdi_args = ['-p', self.current_profile]
+        verdi_args.extend(arg.split())
+        try:
+            verdi.main(args=verdi_args)
+        except SystemExit as e:
+            # SystemExit means the command-line tool finished as intented
+            # No action needed
+            pass
+        except Exception as e:
+            # Catch all python exceptions raised during the verdi command execution
+            print('Verdi Command raised an exception {}'.format(e), file=output)
+            print_exc(file=output)
 
 if __name__ == '__main__':
     import os
