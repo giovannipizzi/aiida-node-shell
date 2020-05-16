@@ -18,6 +18,7 @@ import functools
 from datetime import datetime
 import pytz
 import sys
+import re
 from traceback import print_exc
 
 from ago import human
@@ -125,6 +126,7 @@ class AiiDANodeShell(cmd2.Cmd):
         """Initialise a shell, possibly with a given node preloaded."""
         super().__init__(*args, use_ipython=True, **kwargs)
         self.self_in_py = True
+        self.allow_style = cmd2.ansi.STYLE_TERMINAL
 
         if node_identifier:
             self._set_current_node(node_identifier)
@@ -267,14 +269,14 @@ class AiiDANodeShell(cmd2.Cmd):
         if isinstance(process, CalcJobNode):
             print(get_calcjob_report(process), file=self.stdout)
         elif isinstance(process, WorkChainNode):
-            print(
-                get_workchain_report(process, arg.levelname, arg.indent_size,
-                                     arg.max_depth), file=self.stdout)
+            print(get_workchain_report(process, arg.levelname, arg.indent_size,
+                                       arg.max_depth),
+                  file=self.stdout)
         elif isinstance(process, (CalcFunctionNode, WorkFunctionNode)):
             print(get_process_function_report(process), file=self.stdout)
         else:
-            print('Nothing to show for node type {}'.format(
-                process.__class__), file=self.stdout)
+            print('Nothing to show for node type {}'.format(process.__class__),
+                  file=self.stdout)
 
     def extras_choices_method(self):
         """Method that returns all possible values for the 'extras' command, used for tab-completion."""
@@ -401,9 +403,9 @@ class AiiDANodeShell(cmd2.Cmd):
             return
         if arg.follow is None:
             for ilink, incoming in enumerate(incomings):
-                print("Link #{} - {} ({}) -> {}".format(ilink, incoming.link_type.value.upper(),
-                                            incoming.link_label,
-                                            incoming.node.pk))
+                print("Link #{} - {} ({}) -> {}".format(
+                    ilink, incoming.link_type.value.upper(),
+                    incoming.link_label, incoming.node.pk))
         else:
             if arg.follow >= len(incomings) or arg.follow < 0:
                 print("Error: invalid link id {}".format(arg.follow))
@@ -432,9 +434,9 @@ class AiiDANodeShell(cmd2.Cmd):
             return
         if arg.follow is None:
             for ilink, outgoing in enumerate(outgoings):
-                print("Link #{} - {} ({}) -> {}".format(ilink, outgoing.link_type.value.upper(),
-                                            outgoing.link_label,
-                                            outgoing.node.pk))
+                print("Link #{} - {} ({}) -> {}".format(
+                    ilink, outgoing.link_type.value.upper(),
+                    outgoing.link_label, outgoing.node.pk))
         else:
             if arg.follow >= len(outgoings) or arg.follow < 0:
                 print("Error: invalid link id {}".format(arg.follow))
@@ -590,25 +592,75 @@ class AiiDANodeShell(cmd2.Cmd):
     #    'To be implemented in case we want to manipulate the line'
     #    #line = line.lower()
     #    return line
-
     def do_verdi(self, arg):
-        """Run verdi commands using the current profile"""
+        """
+        Run verdi commands using the current profile.
+        The argument will be passed to ``verdi`` as it is, except that {} will be 
+        expanded to the currently loaded node's pk.
+        You may reference other nodes in the load history using offsets in {}.
+        For example, {-1} will be subsituted with the last loaded nodes' pk.
+        """
         output = self.stdout
 
         # Here I force verdi to use the current profile, otherwise the
         # command won't work for the node shell launched with non-default profile
         verdi_args = ['-p', self.current_profile]
-        verdi_args.extend(arg.split())
+        passed_args = expand_node_subsitute(arg, self._node_hist).split()
+
+        if passed_args:
+            # Print help for this command (not verdi)
+            if passed_args[0] in ('-h', '--help', '-help'):
+                print(AiiDANodeShell.do_verdi.__doc__, file=output)
+                return
+            # Passing -p is not allowed, we can only use the current profile
+            if passed_args[0] in ('-p', '--profile'):
+                print(
+                    'Error: Manual profile selection is not allowed in the node shell.',
+                    file=output)
+                print('Your current profile is: {}'.format(
+                    self.current_profile),
+                      file=output)
+                return
+
+        verdi_args.extend(passed_args)
         try:
-            verdi.main(args=verdi_args)
-        except SystemExit as e:
+            verdi.main(args=verdi_args, prog_name='verdi')
+        except SystemExit as exception:
             # SystemExit means the command-line tool finished as intented
             # No action needed
             pass
-        except Exception as e:
+        except Exception as exception:
             # Catch all python exceptions raised during the verdi command execution
-            print('Verdi Command raised an exception {}'.format(e), file=output)
+            print('Verdi Command raised an exception {}'.format(exception),
+                  file=output)
             print_exc(file=output)
+
+
+def expand_node_subsitute(arg, hist_obj):
+    """
+    Expand the subsitution for node PK in the argument.
+    {} expands to node_history[current_pos].pk
+    {n} expands to node_history[current_pos + n].pk
+    """
+    regex = r"{([-\d]*)}"
+    for occ in re.finditer(regex, arg):
+        whole_str = occ.group(0)
+        if occ.group(1):
+            idx = int(occ.group(1))
+        else:
+            idx = 0
+        pointer = hist_obj.node_history_pointer + idx
+        try:
+            node = hist_obj.node_history[pointer][0]
+        except IndexError:
+            raise RuntimeError('Invalid offset {} in argument {}'.format(
+                pointer, arg))
+        # Replace the line
+        else:
+            arg = arg.replace(whole_str, str(node.args))
+
+    return arg
+
 
 if __name__ == '__main__':
     import os
