@@ -20,6 +20,7 @@ import pytz
 import sys
 import re
 from traceback import print_exc
+from pprint import pformat
 
 from ago import human
 import click
@@ -27,8 +28,7 @@ import click
 from aiida.common.links import LinkType
 from aiida.cmdline.commands.cmd_verdi import verdi
 from aiida.orm.utils.repository import FileType
-from pprint import pformat
-
+from aiida.orm import GroupTypeString
 # Examples for autocompletion: https://github.com/python-cmd2/cmd2/blob/master/examples/tab_autocompletion.py
 
 LINK_TYPES_DICT = {
@@ -80,7 +80,7 @@ def needs_new_node(f):
         current_node = self._current_node
         # Reloading only makes sense for unsealed process
         if isinstance(current_node, ProcessNode):
-            if not current_node.is_sealed: 
+            if not current_node.is_sealed:
                 self.do_reload()
         return f(self, *args, **kwds)
 
@@ -674,6 +674,94 @@ class AiiDANodeShell(cmd2.Cmd):
             print('Verdi Command raised an exception {}'.format(exception),
                   file=output)
             print_exc(file=output)
+
+    group_parser = cmd2.Cmd2ArgumentParser()
+    group_subparser = group_parser.add_subparsers(title='subcommands')
+    groupls_parser = group_subparser.add_parser('list', add_help=False)
+
+    groupls_parser.add_argument('--user-email', '-u', help='Filter by user')
+    groupls_parser.add_argument('--all-users',
+                                help='Flag if include all users',
+                                action='store_true')
+    groupls_parser.add_argument('--all-types',
+                                '-a',
+                                help='Flag if include all types',
+                                action='store_true')
+    groupls_parser.add_argument('--group-type',
+                                '-t',
+                                default=GroupTypeString.USER.value,
+                                help='Filter by type')
+    groupls_parser.add_argument('--with-description',
+                                '-d',
+                                help='Show also the decription',
+                                action='store_true')
+    groupls_parser.add_argument('--startswith',
+                                '-s',
+                                help='Filter by the initial string')
+    groupls_parser.add_argument('--endswith',
+                                '-e',
+                                help='Filter by ending string')
+    groupls_parser.add_argument(
+        '--contains',
+        '-c',
+        help='Filter by checking if the group name contains the string')
+    groupls_parser.add_argument(
+        '--past-days',
+        '-p',
+        type=int,
+        help='Filter by only including those created in the past N days')
+    groupls_parser.add_argument(
+        '--count',
+        '-C',
+        action='store_true',
+        help='Show also the number of nodes in the group')
+
+    groupbelong_parser = group_subparser.add_parser(
+        'belong',
+        help='List groups the current node belongs to.',
+        parents=[groupls_parser])
+
+    def group_list(self, args):
+        """Command for list groups"""
+        from aiida.cmdline.commands.cmd_group import group_list
+        group_list.callback(all_users=args.all_users,
+                            user_email=args.user_email,
+                            all_types=args.all_types,
+                            group_type=args.group_type,
+                            with_description=args.with_description,
+                            count=args.count,
+                            past_days=args.past_days,
+                            startswith=args.startswith,
+                            endswith=args.endswith,
+                            contains=args.contains,
+                            node=None)
+
+    def group_belong(self, args):
+        """Command for list groups"""
+        from aiida.cmdline.commands.cmd_group import group_list
+        group_list.callback(all_users=args.all_users,
+                            user_email=args.user_email,
+                            all_types=args.all_types,
+                            group_type=args.group_type,
+                            with_description=args.with_description,
+                            count=args.count,
+                            past_days=args.past_days,
+                            startswith=args.startswith,
+                            endswith=args.endswith,
+                            contains=args.contains,
+                            node=self._current_node)
+
+    groupls_parser.set_defaults(func=group_list)
+    groupbelong_parser.set_defaults(func=group_belong)
+
+    @cmd2.with_argparser(group_parser)
+    def do_group(self, args):
+        """Group command"""
+        func = getattr(args, 'func', None)
+        if func is not None:
+            func(self, args)
+        else:
+            self.do_help('group')
 
 
 def expand_node_subsitute(arg, hist_obj):
