@@ -103,6 +103,10 @@ class NodeHist:
         if self.node_history_pointer < -1:
             self.node_history_pointer += 1
 
+    def go_last(self):
+        """Go forward in the history"""
+        self.node_history_pointer = -1
+
     def show_hist(self, cmd_shell=None):
         """Print the history of loaded nodes"""
         output = cmd_shell.stdout if cmd_shell else None
@@ -183,21 +187,27 @@ class AiiDANodeShell(cmd2.Cmd):
                              default=1)
 
     @cmd2.with_argparser(move_parser)
-    def do_backward(self, arg):
+    def do_nodehist_backward(self, arg):
         """Back to the previous node"""
         for _ in range(arg.steps):
             self._node_hist.go_back()
         self._set_current_node(self._node_hist.current_node)
 
     @cmd2.with_argparser(move_parser)
-    def do_forward(self, arg):
+    def do_nodehist_forward(self, arg):
         """Go forward in the node history"""
         for _ in range(arg.steps):
             self._node_hist.go_forward()
         self._set_current_node(self._node_hist.current_node)
 
     @with_default_argparse
-    def do_show_hist(self, arg):
+    def do_nodehist_last(self, arg):
+        """Go forward in the node history"""
+        self._node_hist.go_last()
+        self._set_current_node(self._node_hist.current_node)
+
+    @with_default_argparse
+    def do_nodehist_show(self, arg):
         """Show node browsering history"""
         self._node_hist.show_hist()
 
@@ -380,8 +390,8 @@ class AiiDANodeShell(cmd2.Cmd):
                              help='Filter by link type',
                              choices=LINK_TYPES)
 
-    link_parser.add_argument('-f',
-                             '--follow',
+    link_parser.add_argument('-l',
+                             '--follow-link-id',
                              help='Follow this link to the next node',
                              type=int)
 
@@ -398,20 +408,22 @@ class AiiDANodeShell(cmd2.Cmd):
             incomings = self._current_node.get_incoming(
                 link_type=LINK_TYPES_DICT[arg.link_type]).all()
             type_filter_string = ' of type {}'.format(arg.link_type)
+        incomings.sort(
+            key=lambda x: (x.link_type.value, x.link_label, x.node.pk))
         if not incomings:
             print("No incoming links{}".format(type_filter_string))
             return
-        if arg.follow is None:
+        if arg.follow_link_id is None:
             for ilink, incoming in enumerate(incomings):
                 print("Link #{} - {} ({}) -> {}".format(
                     ilink, incoming.link_type.value.upper(),
                     incoming.link_label, incoming.node.pk))
         else:
-            if arg.follow >= len(incomings) or arg.follow < 0:
-                print("Error: invalid link id {}".format(arg.follow))
+            if arg.follow_link_id >= len(incomings) or arg.follow_link_id < 0:
+                print("Error: invalid link id {}".format(arg.follow_link_id))
                 return
 
-            next_pk = incomings[arg.follow].node.pk
+            next_pk = incomings[arg.follow_link_id].node.pk
             self.do_load(next_pk)
 
     @needs_node
@@ -428,20 +440,21 @@ class AiiDANodeShell(cmd2.Cmd):
                 link_type=LINK_TYPES_DICT[arg.link_type]).all()
             type_filter_string = ' of type {}'.format(arg.link_type)
 
-        outgoings = self._current_node.get_outgoing().all()
+        outgoings.sort(
+            key=lambda x: (x.link_type.value, x.link_label, x.node.pk))
         if not outgoings:
             print("No outgoing links{}".format(type_filter_string))
             return
-        if arg.follow is None:
+        if arg.follow_link_id is None:
             for ilink, outgoing in enumerate(outgoings):
                 print("Link #{} - {} ({}) -> {}".format(
                     ilink, outgoing.link_type.value.upper(),
                     outgoing.link_label, outgoing.node.pk))
         else:
-            if arg.follow >= len(outgoings) or arg.follow < 0:
-                print("Error: invalid link id {}".format(arg.follow))
+            if arg.follow_link_id >= len(outgoings) or arg.follow_link_id < 0:
+                print("Error: invalid link id {}".format(arg.follow_link_id))
                 return
-            next_pk = outgoings[arg.follow].node.pk
+            next_pk = outgoings[arg.follow_link_id].node.pk
             self.do_load(next_pk)
 
     @needs_node
