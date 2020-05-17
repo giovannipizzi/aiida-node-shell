@@ -274,14 +274,18 @@ class AiiDANodeShell(cmd2.Cmd):
                                      self.current_profile)
         return '({}) '.format(self.current_profile)
 
+    load_parser = cmd2.Cmd2ArgumentParser()
+    load_parser.add_argument('identifier', help='Identifier for loading the node')
+    @cmd2.with_argparser(load_parser)
     def do_load(self, arg):
         """Load a node in the shell, making it the 'current node'."""
         # When loading the node I reset the history
-        self._set_current_node(arg)
+        self._set_current_node(arg.identifier)
         self._node_hist.set_current(self._current_node,
                                     self._get_node_string())
 
     @needs_node
+    @with_default_argparse
     def do_reload(self, arg):
         """Reload the node in the shell"""
         self._set_current_node(self._current_node.pk)
@@ -326,7 +330,7 @@ class AiiDANodeShell(cmd2.Cmd):
     setter_args = cmd2.Cmd2ArgumentParser()
     setter_args.add_argument('--set', '-s', help='Set the property')
 
-    @needs_node
+    @needs_new_node
     @cmd2.with_argparser(setter_args)
     def do_label(self, arg):  # pylint: disable=unused-argument
         """Show the label of the current node."""
@@ -356,7 +360,7 @@ class AiiDANodeShell(cmd2.Cmd):
         self.poutput("Created {} ({})".format(human(now_aware() - ctime),
                                               ctime))
 
-    @needs_node
+    @needs_new_node
     @with_default_argparse
     def do_mtime(self, arg):  # pylint: disable=unused-argument
         """Show the last modification time of the current node."""
@@ -415,6 +419,7 @@ class AiiDANodeShell(cmd2.Cmd):
                                      help='Filter by user email.')
 
     @cmd2.with_argparser(comment_show_parser)
+    @needs_node
     def do_comment_show(self, arg):
         """Show and comment of a node"""
         from aiida.cmdline.commands.cmd_node import comment_show
@@ -439,6 +444,7 @@ class AiiDANodeShell(cmd2.Cmd):
     comment_add_parse.add_argument('comment', help='Comment to be added')
 
     @cmd2.with_argparser(comment_add_parse)
+    @needs_node
     def do_comment_add(self, arg):
         """Added comment to the current node"""
         content = arg.comment
@@ -585,7 +591,9 @@ class AiiDANodeShell(cmd2.Cmd):
                 return
 
             next_pk = incomings[arg.follow_link_id].node.pk
-            self.do_load(next_pk)
+            self._set_current_node(next_pk)
+            self._node_hist.set_current(self._current_node,
+                                        self._get_node_string())
 
     @needs_new_node
     @cmd2.with_argparser(link_parser)
@@ -617,7 +625,9 @@ class AiiDANodeShell(cmd2.Cmd):
                     arg.follow_link_id))
                 return
             next_pk = outgoings[arg.follow_link_id].node.pk
-            self.do_load(next_pk)
+            self._set_current_node(next_pk)
+            self._node_hist.set_current(self._current_node,
+                                        self._get_node_string())
 
     @needs_new_node
     @with_default_argparse
@@ -746,6 +756,7 @@ class AiiDANodeShell(cmd2.Cmd):
             self.stdout.write(content)
 
     @with_default_argparse
+    @needs_node
     def do_unload(self, arg):  # pylint: disable=unused-argument
         """Unload the node from the repository, making no node to be selected as the 'current node'."""
         self._current_node = None
@@ -762,6 +773,39 @@ class AiiDANodeShell(cmd2.Cmd):
     def do_exit(self, arg):  # pylint: disable=unused-argument
         """Exit the shell."""
         return True
+
+    graph_gen_parser = cmd2.Cmd2ArgumentParser()
+    graph_gen_parser.add_argument('--link-types', '-l', default='all')
+    graph_gen_parser.add_argument('--identifier', default='uuid',)
+    graph_gen_parser.add_argument('--ancestor-depth', type=int)
+    graph_gen_parser.add_argument('--descendant-depth', type=int)
+    graph_gen_parser.add_argument('--process-out', action='store_true')
+    graph_gen_parser.add_argument('--process-in', action='store_true')
+    graph_gen_parser.add_argument('--verbose', action='store_true')
+    graph_gen_parser.add_argument('--engine', '-e', default='dot')
+    graph_gen_parser.add_argument('--output-format', '-f', default='pdf')
+    graph_gen_parser.add_argument('--show', '-s', action='store_true')
+    @needs_new_node
+    @cmd2.with_argparser(graph_gen_parser)
+    def do_graph_generate(self, arg):
+        """Generate the provenance graph for the current node.
+        For comprehensive help information, try 'verdi node graph generate --help'.
+        """
+        from aiida.cmdline.commands.cmd_node import graph_generate
+        with self.verdi_isolate():
+            graph_generate.callback(
+                root_node=self._current_node,
+                link_types=arg.link_types,
+                identifier=arg.identifier,
+                ancestor_depth=arg.ancestor_depth,
+                descendant_depth=arg.descendant_depth,
+                process_out=arg.process_out,
+                process_in=arg.process_in,
+                engine=arg.engine,
+                verbose=arg.verbose,
+                output_format=arg.output_format,
+                show=arg.show
+            )
 
     #def precmd(self, line):
     #    'To be implemented in case we want to manipulate the line'
@@ -869,6 +913,7 @@ class AiiDANodeShell(cmd2.Cmd):
                                 node=None)
 
     @cmd2.with_argparser(group_parser)
+    @needs_node
     def do_group_belong(self, args):
         """Command for list groups"""
         from aiida.cmdline.commands.cmd_group import group_list
