@@ -71,8 +71,7 @@ def needs_node(f):
 
 
 def needs_new_node(f):
-    """
-    Decorator to mark the command prefers to have the node reloaded.
+    """Decorator to mark the command prefers to have the node reloaded.
     The node will be only be reloaded if it is an unsealed ProcessNode.
     """
     @needs_node
@@ -883,8 +882,7 @@ class AiiDANodeShell(cmd2.Cmd):
     #    #line = line.lower()
     #    return line
     def do_verdi(self, arg):
-        """
-        Run verdi commands using the current profile.
+        """Run verdi commands using the current profile.
         The argument will be passed to ``verdi`` as it is, except that {} will be 
         expanded to the currently loaded node's pk.
         You may reference other nodes in the load history using offsets in {}.
@@ -1016,15 +1014,13 @@ class AiiDANodeShell(cmd2.Cmd):
         self.poutput(os.getcwd())
 
     @with_default_argparse
-    def do_verdi_shell(self, _):
-        """
-        Enter an ipython shell simimlar to that launched by `verdi shell`
+    def do_vshell(self, _):
+        """Enter an ipython shell simimlar to that launched by `verdi shell`
         """
         from cmd2.py_bridge import PyBridge
 
         def load_ipy(cmd2_app, py_bridge):
-            """
-            Embed an IPython shell in an environment that is restricted to only the variables in this function
+            """Embed an IPython shell in an environment that is restricted to only the variables in this function
             :param cmd2_app: instance of the cmd2 app
             :param py_bridge: a PyBridge
             """
@@ -1088,8 +1084,7 @@ class AiiDANodeShell(cmd2.Cmd):
 
 
 def expand_node_subsitute(arg, hist_obj):
-    """
-    Expand the subsitution for node PK in the argument.
+    """Expand the subsitution for node PK in the argument.
     {} expands to node_history[current_pos].pk
     {n} expands to node_history[current_pos + n].pk
     """
