@@ -263,8 +263,8 @@ class AiiDANodeShell(cmd2.Cmd):
             node = self._current_node
         if node is None:
             return ''
-        class_name = self._current_node.__class__.__name__
-        identifier = self._current_node.pk
+        class_name = node.__class__.__name__
+        identifier = node.pk
         return '{}<{}>'.format(class_name, identifier)
 
     @property
@@ -646,9 +646,11 @@ class AiiDANodeShell(cmd2.Cmd):
             return
         if arg.follow_link_id is None:
             for ilink, incoming in enumerate(incomings):
-                self.poutput("Link #{} - {} ({}) -> {}".format(
-                    ilink, incoming.link_type.value.upper(),
-                    incoming.link_label, incoming.node.pk))
+                self.poutput(
+                    yellow("Link # {} ".format(ilink)) +
+                    "- {} ({}) -> {}".format(
+                        incoming.link_type.value.upper(), incoming.link_label,
+                        self._get_node_string(incoming.node)))
         else:
             if arg.follow_link_id >= len(incomings) or arg.follow_link_id < 0:
                 self.poutput("Error: invalid link id {}".format(
@@ -681,9 +683,11 @@ class AiiDANodeShell(cmd2.Cmd):
             return
         if arg.follow_link_id is None:
             for ilink, outgoing in enumerate(outgoings):
-                self.poutput("Link #{} - {} ({}) -> {}".format(
-                    ilink, outgoing.link_type.value.upper(),
-                    outgoing.link_label, outgoing.node.pk))
+                self.poutput(
+                    yellow("Link # {} ".format(ilink)) +
+                    "- {} ({}) -> {}".format(
+                        outgoing.link_type.value.upper(), outgoing.link_label,
+                        self._get_node_string(outgoing.node)))
         else:
             if arg.follow_link_id >= len(outgoings) or arg.follow_link_id < 0:
                 self.poutput("Error: invalid link id {}".format(
@@ -1010,6 +1014,60 @@ class AiiDANodeShell(cmd2.Cmd):
     def do_pwd(self, arg):
         """Return the current workding directory"""
         self.poutput(os.getcwd())
+
+    @with_default_argparse
+    def do_verdi_shell(self, _):
+        """
+        Enter an ipython shell simimlar to that launched by `verdi shell`
+        """
+        from cmd2.py_bridge import PyBridge
+
+        def load_ipy(cmd2_app, py_bridge):
+            """
+            Embed an IPython shell in an environment that is restricted to only the variables in this function
+            :param cmd2_app: instance of the cmd2 app
+            :param py_bridge: a PyBridge
+            """
+            from aiida.cmdline.utils.shell import get_start_namespace
+            from IPython import embed
+
+            # Create a variable pointing to py_bridge
+            exec("{} = py_bridge".format(cmd2_app.py_bridge_name))
+
+            # Add node_shell variable pointing to this app
+            exec("node_shell = cmd2_app")
+            # Add current_node varible pointing to the current loaded node
+            exec("current_node = cmd2_app._current_node")
+
+            # Initialse the namespace - this is what used by `verdi shell`
+            locals().update(get_start_namespace())
+            _cnode_string = cmd2_app._get_node_string()
+
+            # Delete these names from the environment so IPython can't use them
+            del cmd2_app
+            del py_bridge
+
+            # Start ipy shell
+            embed(banner1=(
+                'Entering an embedded verdi shell. Type quit or <Ctrl>-d to exit.\n'
+                'Run Python code from external files with: run filename.py\n'
+                'If the color is not on, you can enable it using line magic \'%colors linux\'\n'
+                'The loaded node \'{}\' can be accessed with \'current_node\'\n'
+                .format(_cnode_string)),
+                  exit_msg='Leaving verdi shell, back to the node shell')
+
+        if self.in_pyscript():
+            self.perror(
+                "Recursively entering interactive verdi shells is not allowed")
+            return
+
+        try:
+            self._in_py = True
+            new_py_bridge = PyBridge(self)
+            load_ipy(self, new_py_bridge)
+            return new_py_bridge.stop
+        finally:
+            self._in_py = False
 
     @contextlib.contextmanager
     def verdi_isolate(self):
