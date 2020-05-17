@@ -116,7 +116,7 @@ class NodeHist:
     def set_current(self, node, desc):
         """Set the current node"""
         if self.node_history and self.node_history[
-                self.node_history_pointer].node == node:
+                self.node_history_pointer].node.pk == node.pk:
             # Loading the current node - do nothing
             return
         # Otherwise we append the node to the history
@@ -174,7 +174,8 @@ class NodeHist:
                 data_list.extend(link_lines)
             data_list.append(node_line)
         if cmd is None:
-            cmd2.ansi.style_aware_write(sys.stdout, '\n'.join(data_list) + '\n')
+            cmd2.ansi.style_aware_write(sys.stdout,
+                                        '\n'.join(data_list) + '\n')
         else:
             cmd.poutput('\n'.join(data_list))
 
@@ -275,7 +276,9 @@ class AiiDANodeShell(cmd2.Cmd):
         return '({}) '.format(self.current_profile)
 
     load_parser = cmd2.Cmd2ArgumentParser()
-    load_parser.add_argument('identifier', help='Identifier for loading the node')
+    load_parser.add_argument('identifier',
+                             help='Identifier for loading the node')
+
     @cmd2.with_argparser(load_parser)
     def do_load(self, arg):
         """Load a node in the shell, making it the 'current node'."""
@@ -776,7 +779,10 @@ class AiiDANodeShell(cmd2.Cmd):
 
     graph_gen_parser = cmd2.Cmd2ArgumentParser()
     graph_gen_parser.add_argument('--link-types', '-l', default='all')
-    graph_gen_parser.add_argument('--identifier', default='uuid',)
+    graph_gen_parser.add_argument(
+        '--identifier',
+        default='uuid',
+    )
     graph_gen_parser.add_argument('--ancestor-depth', type=int)
     graph_gen_parser.add_argument('--descendant-depth', type=int)
     graph_gen_parser.add_argument('--process-out', action='store_true')
@@ -785,6 +791,7 @@ class AiiDANodeShell(cmd2.Cmd):
     graph_gen_parser.add_argument('--engine', '-e', default='dot')
     graph_gen_parser.add_argument('--output-format', '-f', default='pdf')
     graph_gen_parser.add_argument('--show', '-s', action='store_true')
+
     @needs_new_node
     @cmd2.with_argparser(graph_gen_parser)
     def do_graph_generate(self, arg):
@@ -793,19 +800,17 @@ class AiiDANodeShell(cmd2.Cmd):
         """
         from aiida.cmdline.commands.cmd_node import graph_generate
         with self.verdi_isolate():
-            graph_generate.callback(
-                root_node=self._current_node,
-                link_types=arg.link_types,
-                identifier=arg.identifier,
-                ancestor_depth=arg.ancestor_depth,
-                descendant_depth=arg.descendant_depth,
-                process_out=arg.process_out,
-                process_in=arg.process_in,
-                engine=arg.engine,
-                verbose=arg.verbose,
-                output_format=arg.output_format,
-                show=arg.show
-            )
+            graph_generate.callback(root_node=self._current_node,
+                                    link_types=arg.link_types,
+                                    identifier=arg.identifier,
+                                    ancestor_depth=arg.ancestor_depth,
+                                    descendant_depth=arg.descendant_depth,
+                                    process_out=arg.process_out,
+                                    process_in=arg.process_in,
+                                    engine=arg.engine,
+                                    verbose=arg.verbose,
+                                    output_format=arg.output_format,
+                                    show=arg.show)
 
     #def precmd(self, line):
     #    'To be implemented in case we want to manipulate the line'
