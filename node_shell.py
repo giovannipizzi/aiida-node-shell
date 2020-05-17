@@ -10,6 +10,7 @@ a much more intuitive interface (even if more limited) than the python API.
 More details in the README.md file.
 
 Author: Giovanni Pizzi, EPFL
+Contributor: Bonan Zhu
 
 Version: 0.1
 """
