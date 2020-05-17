@@ -724,10 +724,14 @@ class AiiDANodeShell(cmd2.Cmd):
             # Passing -p is not allowed, we can only use the current profile
             if passed_args[0] in ('-p', '--profile'):
                 print(
-                    'Error: Manual profile selection is not allowed in the node shell.',
+                    red('Error: ') + 
+                    'Manual profile selection is not allowed in the node shell.',
+                    file=output)
+                print(
+                     'To switch profile, relaunch the node shell with verdi -p <profile} run.',
                     file=output)
                 print('Your current profile is: {}'.format(
-                    self.current_profile),
+                    green(self.current_profile)),
                       file=output)
                 return
 
