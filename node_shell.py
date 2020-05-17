@@ -456,6 +456,68 @@ class AiiDANodeShell(cmd2.Cmd):
             self.poutput('comment added to {}'.format(
                 self._get_node_string(self._current_node)))
 
+    def comment_add_rm_choices_method(self):
+        """Method that returns all possible values for the 'extras' command, used for tab-completion."""
+        return [comment.pk for comment in self._current_node.get_comments()]
+
+    comment_remove_parser = cmd2.Cmd2ArgumentParser()
+    comment_remove_parser.add_argument(
+        'id',
+        help='ID of the comment to be deleted',
+        type=int,
+        choices_method=comment_add_rm_choices_method)
+    comment_remove_parser.add_argument('--force', '-f', action='store_true')
+
+    @cmd2.with_argparser(comment_remove_parser)
+    def do_comment_remove(self, arg):
+        """Added comment to the current node"""
+        from aiida.orm.comments import Comment
+        from aiida.cmdline.utils import echo
+        from aiida.common import exceptions
+        comment, force = arg.id, arg.force
+        with self.verdi_isolate():
+            if not force:
+                try:
+                    click.confirm(
+                        'Are you sure you want to remove comment<{}>'.format(
+                            comment),
+                        abort=True)
+                except click.exceptions.Abort:
+                    return
+            try:
+                Comment.objects.delete(comment)
+            except exceptions.NotExistent as exception:
+                echo.echo_error('failed to remove comment<{}>: {}'.format(
+                    comment, exception))
+            else:
+                echo.echo_success('removed comment<{}>'.format(comment))
+
+    comment_update_parser = cmd2.Cmd2ArgumentParser()
+    comment_update_parser.add_argument(
+        'id',
+        help='ID of the comment to be updated',
+        type=int,
+        choices_method=comment_add_rm_choices_method)
+    comment_update_parser.add_argument('content',
+                                       help='Conetnet of the comment')
+
+    @cmd2.with_argparser(comment_update_parser)
+    def do_comment_update(self, arg):
+        """Update comment for a given comment ID"""
+        from aiida.orm.comments import Comment
+        from aiida.cmdline.utils import echo
+        from aiida.common import exceptions
+        with self.verdi_isolate():
+            comment_id, content = arg.id, arg.content
+            try:
+                comment = Comment.objects.get(id=comment_id)
+            except (exceptions.NotExistent, exceptions.MultipleObjectsError):
+                echo.echo_error('comment<{}> not found'.format(comment_id))
+
+            comment.set_content(content)
+
+            echo.echo_success('comment<{}> updated'.format(comment_id))
+
     def extras_choices_method(self):
         """Method that returns all possible values for the 'extras' command, used for tab-completion."""
         completions_with_desc = []
@@ -941,6 +1003,8 @@ class AiiDANodeShell(cmd2.Cmd):
         if not path:
             path = os.path.expanduser("~")
         os.chdir(path)
+
+    complete_cd = cmd2.Cmd.path_complete
 
     @with_default_argparse
     def do_pwd(self, arg):
