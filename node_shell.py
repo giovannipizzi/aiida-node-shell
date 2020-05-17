@@ -144,7 +144,7 @@ class NodeHist:
         """Go forward in the history"""
         self.node_history_pointer = -1
 
-    def show_hist(self, cmd_shell=None):
+    def show_hist(self, cmd=None):
         """Print the history of loaded nodes"""
         n_hist = len(self.node_history)
         current_pos = n_hist + self.node_history_pointer
@@ -173,8 +173,10 @@ class NodeHist:
             if i > 0:
                 data_list.extend(link_lines)
             data_list.append(node_line)
-
-        cmd2.ansi.style_aware_write(sys.stdout, '\n'.join(data_list) + '\n')
+        if cmd is None:
+            cmd2.ansi.style_aware_write(sys.stdout, '\n'.join(data_list) + '\n')
+        else:
+            cmd.poutput('\n'.join(data_list))
 
     def get_link_to_previous(self, current_node):
         """Get the link to the previous node"""
@@ -704,22 +706,23 @@ class AiiDANodeShell(cmd2.Cmd):
     @cmd2.with_argparser(ls_parser)
     def do_repo_ls(self, arg):
         """List all files and folders in the repository of the current node."""
-        for obj in self._current_node.list_objects(arg.PATH):
-            if arg.long:
-                click.secho('[{}] '.format(obj.type.name[0].lower()),
-                            fg='blue',
-                            bold=True,
-                            nl=False)
-            click.secho(obj.name,
-                        nl=False,
-                        bold=(obj.type == FileType.DIRECTORY))
-            if arg.no_trailing_slashes:
-                click.secho("")
-            else:
-                if obj.type == FileType.DIRECTORY:
-                    click.secho("/")
-                else:
+        with self.verdi_isolate():
+            for obj in self._current_node.list_objects(arg.PATH):
+                if arg.long:
+                    click.secho('[{}] '.format(obj.type.name[0].lower()),
+                                fg='blue',
+                                bold=True,
+                                nl=False)
+                click.secho(obj.name,
+                            nl=False,
+                            bold=(obj.type == FileType.DIRECTORY))
+                if arg.no_trailing_slashes:
                     click.secho("")
+                else:
+                    if obj.type == FileType.DIRECTORY:
+                        click.secho("/")
+                    else:
+                        click.secho("")
 
     cat_parser = cmd2.Cmd2ArgumentParser()
     cat_parser.add_argument('PATH',
