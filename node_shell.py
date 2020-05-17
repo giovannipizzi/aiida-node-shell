@@ -23,6 +23,7 @@ import re
 from traceback import print_exc
 from pprint import pformat
 from collections import namedtuple
+import contextlib
 
 from ago import human
 import click
@@ -59,7 +60,7 @@ def needs_node(f):
     def wrapper(self, *args, **kwds):  # pylint: disable=inconsistent-return-statements
         """Print an error and return if there is no node loaded."""
         if not self._current_node:  # pylint: disable=protected-access
-            print(
+            self.poutput(
                 "ERROR: No node loaded - load a node with `load NODE_IDENTIFIER` first"
             )
             return
@@ -97,6 +98,7 @@ blue = functools.partial(ansi.style, fg=ansi.fg.bright_blue)
 green = functools.partial(ansi.style, fg=ansi.fg.bright_green)
 red = functools.partial(ansi.style, fg=ansi.fg.bright_red)
 cyan = functools.partial(ansi.style, fg=ansi.fg.cyan)
+
 
 class NodeHist:
     """Holds a history of the nodes"""
@@ -148,7 +150,8 @@ class NodeHist:
         data_list = []
         for i, hist in enumerate(self.node_history):
             here_mark = yellow('<-- We are here') if i == current_pos else ''
-            node_line = '{} {} {}'.format(hist.desc, hist.node.label, here_mark)
+            node_line = '{} {} {}'.format(hist.desc, hist.node.label,
+                                          here_mark)
             link_lines = []
             if hist.linkinfo is not None:
                 # User unicode symbols for direction
@@ -156,7 +159,8 @@ class NodeHist:
                     link_direction = red('  🢁  ')
                 else:
                     link_direction = green('  🢃  ')
-                link_line = '---  [{}] {}'.format(hist.linkinfo.label, hist.linkinfo.type)
+                link_line = '---  [{}] {}'.format(hist.linkinfo.label,
+                                                  hist.linkinfo.type)
             else:
                 link_direction = '  ✖  '
                 link_line = ''
@@ -186,7 +190,9 @@ class NodeHist:
         direction = None
         q = QueryBuilder()
         q.append(Node, filters={'id': previous_node.pk})
-        q.append(Node, filters={'id': current_node.pk}, edge_project=['type', 'label'])
+        q.append(Node,
+                 filters={'id': current_node.pk},
+                 edge_project=['type', 'label'])
         res = q.all()
         # Sort by type, then label
         if res:
@@ -195,18 +201,19 @@ class NodeHist:
             # Now try from current to previous
             q = QueryBuilder()
             q.append(Node, filters={'id': current_node.pk})
-            q.append(Node, filters={'id': previous_node.pk}, edge_project=['type', 'label'])
+            q.append(Node,
+                     filters={'id': previous_node.pk},
+                     edge_project=['type', 'label'])
             res = q.all()
             if res:
                 direction = '<'
         # Stop here if no link is found
         if direction is None:
-            return 
+            return
         # Now we have a link
         res.sort(key=lambda x: (x[0], x[1]))
         ltype, llabel = res[0]
         return LinkInfo(direction, ltype.upper(), llabel)
-
 
 
 class AiiDANodeShell(cmd2.Cmd):
@@ -268,7 +275,8 @@ class AiiDANodeShell(cmd2.Cmd):
         """Load a node in the shell, making it the 'current node'."""
         # When loading the node I reset the history
         self._set_current_node(arg)
-        self._node_hist.set_current(self._current_node, self._get_node_string())
+        self._node_hist.set_current(self._current_node,
+                                    self._get_node_string())
 
     @needs_node
     def do_reload(self, arg):
@@ -310,34 +318,48 @@ class AiiDANodeShell(cmd2.Cmd):
     @with_default_argparse
     def do_uuid(self, arg):  # pylint: disable=unused-argument
         """Show the UUID of the current node."""
-        print(self._current_node.uuid)
+        self.poutput(self._current_node.uuid)
+
+    setter_args = cmd2.Cmd2ArgumentParser()
+    setter_args.add_argument('--set', '-s', help='Set the property')
 
     @needs_node
-    @with_default_argparse
+    @cmd2.with_argparser(setter_args)
     def do_label(self, arg):  # pylint: disable=unused-argument
         """Show the label of the current node."""
-        print(self._current_node.label)
+        if arg.set is not None:
+            self.poutput("Replacing current label {} with {}".format(
+                self._current_node.label, arg.set))
+            self._current_node.label = arg.set
+        else:
+            self.poutput(self._current_node.label)
 
     @needs_node
-    @with_default_argparse
+    @cmd2.with_argparser(setter_args)
     def do_description(self, arg):  # pylint: disable=unused-argument
         """Show the description of the current node."""
-        print(self._current_node.description)
+        if arg.set is not None:
+            self.poutput("Replacing current description {} with {}".format(
+                self._current_node.description, arg.set))
+            self._current_node.description = arg.set
+        else:
+            self.poutput(self._current_node.description)
 
     @needs_node
     @with_default_argparse
     def do_ctime(self, arg):  # pylint: disable=unused-argument
         """Show the creation time of the current node."""
         ctime = self._current_node.ctime
-        print("Created {} ({})".format(human(now_aware() - ctime), ctime))
+        self.poutput("Created {} ({})".format(human(now_aware() - ctime),
+                                              ctime))
 
     @needs_node
     @with_default_argparse
     def do_mtime(self, arg):  # pylint: disable=unused-argument
         """Show the last modification time of the current node."""
         mtime = self._current_node.mtime
-        print("Last modified {} ({})".format(human(now_aware() - mtime),
-                                             mtime))
+        self.poutput("Last modified {} ({})".format(human(now_aware() - mtime),
+                                                    mtime))
 
     @needs_new_node
     @with_default_argparse
@@ -345,10 +367,10 @@ class AiiDANodeShell(cmd2.Cmd):
         """Show all extras of the current node (keys and values)."""
         extras = self._current_node.extras
         if not extras:
-            print("No extras")
+            self.poutput("No extras")
             return
         for key, val in extras.items():
-            print('- {}: {}'.format(key, pformat(val)))
+            self.poutput('- {}: {}'.format(key, pformat(val)))
 
     report_args = cmd2.Cmd2ArgumentParser()
     report_args.add_argument('--levelname', '-l', type=str, default='REPORT')
@@ -373,16 +395,54 @@ class AiiDANodeShell(cmd2.Cmd):
 
         process = self._current_node
         if isinstance(process, CalcJobNode):
-            print(get_calcjob_report(process), file=self.stdout)
+            self.poutput(get_calcjob_report(process))
         elif isinstance(process, WorkChainNode):
-            print(get_workchain_report(process, arg.levelname, arg.indent_size,
-                                       arg.max_depth),
-                  file=self.stdout)
+            self.poutput(
+                get_workchain_report(process, arg.levelname, arg.indent_size,
+                                     arg.max_depth))
         elif isinstance(process, (CalcFunctionNode, WorkFunctionNode)):
-            print(get_process_function_report(process), file=self.stdout)
+            self.poutput(get_process_function_report(process))
         else:
-            print('Nothing to show for node type {}'.format(process.__class__),
-                  file=self.stdout)
+            self.poutput('Nothing to show for node type {}'.format(
+                process.__class__))
+
+    comment_show_parser = cmd2.Cmd2ArgumentParser()
+    comment_show_parser.add_argument('--user',
+                                     '-u',
+                                     help='Filter by user email.')
+
+    @cmd2.with_argparser(comment_show_parser)
+    def do_comment_show(self, arg):
+        """Show and comment of a node"""
+        from aiida.cmdline.commands.cmd_node import comment_show
+        from aiida.orm import User
+        from aiida.common.exceptions import NotExistent
+        node = self._current_node
+        if arg.user is not None:
+            try:
+                user = User.objects.get(email=arg.user)
+            except NotExistent:
+                self.poutput(
+                    red('Error: ') +
+                    'User {} does not exists'.format(arg.user))
+                return
+        else:
+            user = None
+        # Use the function directly
+        with self.verdi_isolate():
+            comment_show.callback(user=user, nodes=[node])
+
+    comment_add_parse = cmd2.Cmd2ArgumentParser()
+    comment_add_parse.add_argument('comment', help='Comment to be added')
+
+    @cmd2.with_argparser(comment_add_parse)
+    def do_comment_add(self, arg):
+        """Added comment to the current node"""
+        content = arg.comment
+        if content:
+            self._current_node.add_comment(content)
+            self.poutput('comment added to {}'.format(
+                self._get_node_string(self._current_node)))
 
     def extras_choices_method(self):
         """Method that returns all possible values for the 'extras' command, used for tab-completion."""
@@ -410,10 +470,10 @@ class AiiDANodeShell(cmd2.Cmd):
         """Show one extra of the current node."""
         extras = self._current_node.extras
         try:
-            print('- {}: {}'.format(arg.extra_key,
-                                    pformat(extras[arg.extra_key])))
+            self.poutput('- {}: {}'.format(arg.extra_key,
+                                           pformat(extras[arg.extra_key])))
         except KeyError:
-            print("No extra with key '{}'".format(arg.extra_key))
+            self.poutput("No extra with key '{}'".format(arg.extra_key))
 
     @needs_node
     @with_default_argparse
@@ -421,10 +481,10 @@ class AiiDANodeShell(cmd2.Cmd):
         """Show the keys of all extras of the current node."""
         extras_keys = self._current_node.extras_keys()
         if not extras_keys:
-            print("No extras")
+            self.poutput("No extras")
             return
         for key in sorted(extras_keys):
-            print('- {}'.format(key))
+            self.poutput('- {}'.format(key))
 
     @needs_new_node
     @with_default_argparse
@@ -432,10 +492,10 @@ class AiiDANodeShell(cmd2.Cmd):
         """Show all attributes (keys and values) of the current node."""
         attributes = self._current_node.attributes
         if not attributes:
-            print("No attributes")
+            self.poutput("No attributes")
             return
         for key, val in attributes.items():
-            print('- {}: {}'.format(key, pformat(val)))
+            self.poutput('- {}: {}'.format(key, pformat(val)))
 
     def attrs_choices_method(self):
         """Method that returns all possible values for the 'attrs' command, used for tab-completion."""
@@ -464,10 +524,11 @@ class AiiDANodeShell(cmd2.Cmd):
         """Show one attribute of the current node."""
         attributes = self._current_node.attributes
         try:
-            print('- {}: {}'.format(arg.attribute_key,
-                                    pformat(attributes[arg.attribute_key])))
+            self.poutput('- {}: {}'.format(
+                arg.attribute_key, pformat(attributes[arg.attribute_key])))
         except KeyError:
-            print("No attribute with key '{}'".format(arg.attribute_key))
+            self.poutput("No attribute with key '{}'".format(
+                arg.attribute_key))
 
     @needs_new_node
     @with_default_argparse
@@ -475,10 +536,10 @@ class AiiDANodeShell(cmd2.Cmd):
         """Show the keys of all attributes of the current node."""
         attributes_keys = self._current_node.attributes_keys()
         if not attributes_keys:
-            print("No attributes")
+            self.poutput("No attributes")
             return
         for key in sorted(attributes_keys):
-            print('- {}'.format(key))
+            self.poutput('- {}'.format(key))
 
     link_parser = cmd2.Cmd2ArgumentParser()
     link_parser.add_argument('-t',
@@ -507,16 +568,17 @@ class AiiDANodeShell(cmd2.Cmd):
         incomings.sort(
             key=lambda x: (x.link_type.value, x.link_label, x.node.pk))
         if not incomings:
-            print("No incoming links{}".format(type_filter_string))
+            self.poutput("No incoming links{}".format(type_filter_string))
             return
         if arg.follow_link_id is None:
             for ilink, incoming in enumerate(incomings):
-                print("Link #{} - {} ({}) -> {}".format(
+                self.poutput("Link #{} - {} ({}) -> {}".format(
                     ilink, incoming.link_type.value.upper(),
                     incoming.link_label, incoming.node.pk))
         else:
             if arg.follow_link_id >= len(incomings) or arg.follow_link_id < 0:
-                print("Error: invalid link id {}".format(arg.follow_link_id))
+                self.poutput("Error: invalid link id {}".format(
+                    arg.follow_link_id))
                 return
 
             next_pk = incomings[arg.follow_link_id].node.pk
@@ -539,16 +601,17 @@ class AiiDANodeShell(cmd2.Cmd):
         outgoings.sort(
             key=lambda x: (x.link_type.value, x.link_label, x.node.pk))
         if not outgoings:
-            print("No outgoing links{}".format(type_filter_string))
+            self.poutput("No outgoing links{}".format(type_filter_string))
             return
         if arg.follow_link_id is None:
             for ilink, outgoing in enumerate(outgoings):
-                print("Link #{} - {} ({}) -> {}".format(
+                self.poutput("Link #{} - {} ({}) -> {}".format(
                     ilink, outgoing.link_type.value.upper(),
                     outgoing.link_label, outgoing.node.pk))
         else:
             if arg.follow_link_id >= len(outgoings) or arg.follow_link_id < 0:
-                print("Error: invalid link id {}".format(arg.follow_link_id))
+                self.poutput("Error: invalid link id {}".format(
+                    arg.follow_link_id))
                 return
             next_pk = outgoings[arg.follow_link_id].node.pk
             self.do_load(next_pk)
@@ -559,7 +622,7 @@ class AiiDANodeShell(cmd2.Cmd):
         """Show textual information on the current node."""
         from aiida.cmdline.utils.common import get_node_info
 
-        print(get_node_info(self._current_node))
+        self.poutput(get_node_info(self._current_node))
 
     def repo_ls_completer_method(self, text, line, begidx, endidx):
         """Method to perform completion for the 'repo_ls' command.
@@ -671,13 +734,12 @@ class AiiDANodeShell(cmd2.Cmd):
         try:
             content = self._current_node.get_object_content(arg.PATH)
         except IsADirectoryError:
-            print("Error: '{}' is a directory".format(arg.PATH),
-                  file=sys.stderr)
+            self.perror("Error: '{}' is a directory".format(arg.PATH))
         except FileNotFoundError:
-            print("Error: '{}' not found if node repository".format(arg.PATH),
-                  file=sys.stderr)
+            self.perror("Error: '{}' not found if node repository".format(
+                arg.PATH))
         else:
-            sys.stdout.write(content)
+            self.stdout.write(content)
 
     @with_default_argparse
     def do_unload(self, arg):  # pylint: disable=unused-argument
@@ -709,7 +771,6 @@ class AiiDANodeShell(cmd2.Cmd):
         You may reference other nodes in the load history using offsets in {}.
         For example, {-1} will be subsituted with the last loaded nodes' pk.
         """
-        output = self.stdout
 
         # Here I force verdi to use the current profile, otherwise the
         # command won't work for the node shell launched with non-default profile
@@ -719,59 +780,58 @@ class AiiDANodeShell(cmd2.Cmd):
         if passed_args:
             # Print help for this command (not verdi)
             if passed_args[0] in ('-h', '--help', '-help'):
-                print(AiiDANodeShell.do_verdi.__doc__, file=output)
-                return
+                self.poutput(AiiDANodeShell.do_verdi.__doc__)
             # Passing -p is not allowed, we can only use the current profile
             if passed_args[0] in ('-p', '--profile'):
-                print(
-                    red('Error: ') + 
-                    'Manual profile selection is not allowed in the node shell.',
-                    file=output)
-                print(
-                     'To switch profile, relaunch the node shell with verdi -p <profile} run.',
-                    file=output)
-                print('Your current profile is: {}'.format(
-                    green(self.current_profile)),
-                      file=output)
+                self.poutput(
+                    red('Error: ') +
+                    'Manual profile selection is not allowed in the node shell.'
+                )
+                self.poutput(
+                    'To switch profile, relaunch the node shell with verdi -p <profile} run.'
+                )
+                self.poutput('Your current profile is: {}'.format(
+                    green(self.current_profile)))
                 return
 
         verdi_args.extend(passed_args)
         try:
-            verdi.main(args=verdi_args, prog_name='verdi')
+            with self.verdi_isolate():
+                verdi.main(args=verdi_args, prog_name='verdi')
         except SystemExit as exception:
             # SystemExit means the command-line tool finished as intented
             # No action needed
             pass
         except Exception as exception:
             # Catch all python exceptions raised during the verdi command execution
-            print('Verdi Command raised an exception {}'.format(exception),
-                  file=output)
-            print_exc(file=output)
+            self.poutput(
+                'Verdi Command raised an exception {}'.format(exception))
+            print_exc(file=self.stdout)
 
     group_parser = cmd2.Cmd2ArgumentParser()
 
     group_parser.add_argument('--user-email', '-u', help='Filter by user')
     group_parser.add_argument('--all-users',
-                                help='Flag if include all users',
-                                action='store_true')
+                              help='Flag if include all users',
+                              action='store_true')
     group_parser.add_argument('--all-types',
-                                '-a',
-                                help='Flag if include all types',
-                                action='store_true')
+                              '-a',
+                              help='Flag if include all types',
+                              action='store_true')
     group_parser.add_argument('--group-type',
-                                '-t',
-                                default=GroupTypeString.USER.value,
-                                help='Filter by type')
+                              '-t',
+                              default=GroupTypeString.USER.value,
+                              help='Filter by type')
     group_parser.add_argument('--with-description',
-                                '-d',
-                                help='Show also the decription',
-                                action='store_true')
+                              '-d',
+                              help='Show also the decription',
+                              action='store_true')
     group_parser.add_argument('--startswith',
-                                '-s',
-                                help='Filter by the initial string')
+                              '-s',
+                              help='Filter by the initial string')
     group_parser.add_argument('--endswith',
-                                '-e',
-                                help='Filter by ending string')
+                              '-e',
+                              help='Filter by ending string')
     group_parser.add_argument(
         '--contains',
         '-c',
@@ -791,33 +851,52 @@ class AiiDANodeShell(cmd2.Cmd):
     def do_group_list(self, args):
         """Command for list groups"""
         from aiida.cmdline.commands.cmd_group import group_list
-        group_list.callback(all_users=args.all_users,
-                            user_email=args.user_email,
-                            all_types=args.all_types,
-                            group_type=args.group_type,
-                            with_description=args.with_description,
-                            count=args.count,
-                            past_days=args.past_days,
-                            startswith=args.startswith,
-                            endswith=args.endswith,
-                            contains=args.contains,
-                            node=None)
+        with self.verdi_isolate():
+            group_list.callback(all_users=args.all_users,
+                                user_email=args.user_email,
+                                all_types=args.all_types,
+                                group_type=args.group_type,
+                                with_description=args.with_description,
+                                count=args.count,
+                                past_days=args.past_days,
+                                startswith=args.startswith,
+                                endswith=args.endswith,
+                                contains=args.contains,
+                                node=None)
 
     @cmd2.with_argparser(group_parser)
     def do_group_belong(self, args):
         """Command for list groups"""
         from aiida.cmdline.commands.cmd_group import group_list
-        group_list.callback(all_users=args.all_users,
-                            user_email=args.user_email,
-                            all_types=args.all_types,
-                            group_type=args.group_type,
-                            with_description=args.with_description,
-                            count=args.count,
-                            past_days=args.past_days,
-                            startswith=args.startswith,
-                            endswith=args.endswith,
-                            contains=args.contains,
-                            node=self._current_node)
+        with self.verdi_isolate():
+            group_list.callback(all_users=args.all_users,
+                                user_email=args.user_email,
+                                all_types=args.all_types,
+                                group_type=args.group_type,
+                                with_description=args.with_description,
+                                count=args.count,
+                                past_days=args.past_days,
+                                startswith=args.startswith,
+                                endswith=args.endswith,
+                                contains=args.contains,
+                                node=self._current_node)
+
+    @contextlib.contextmanager
+    def verdi_isolate(self):
+        """A context manager that sets up the isolation for invoking of a
+        command line tool. The sys.stdin and sys.sydout are temporarily redirected
+        to self.stdout, self.stderr. This is useful for calling verdi commends that
+        writes directly to stdout and stderr
+        """
+
+        old_stdout = sys.stdout
+
+        sys.stdout = self.stdout
+
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout
 
 
 def expand_node_subsitute(arg, hist_obj):
@@ -835,13 +914,13 @@ def expand_node_subsitute(arg, hist_obj):
             idx = 0
         pointer = hist_obj.node_history_pointer + idx
         try:
-            node = hist_obj.node_history[pointer][0]
+            node = hist_obj.node_history[pointer].node
         except IndexError:
             raise RuntimeError('Invalid offset {} in argument {}'.format(
                 pointer, arg))
         # Replace the line
         else:
-            arg = arg.replace(whole_str, str(node.args))
+            arg = arg.replace(whole_str, str(node.pk))
 
     return arg
 

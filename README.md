@@ -145,6 +145,11 @@ The shell by default has no preloaded node, and the shell shows just the current
   to quick interaction with `verdi`.
   An example `.aiidashellrc` file is provided in the repository.
 
+## Konwn issues
+
+- The use of `verdi status` in the node shell without rabbitmq server running will cause CPU usage surge. 
+  This is probably because the python process does terminate, unlike that in the real `verdi` command. 
+
 ## Current status of the code and feedback
 I believe that the current code is already very useful, but it must be considered a first draft, to allow people to test
 the functionality and provide feedback.
