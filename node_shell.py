@@ -935,6 +935,18 @@ class AiiDANodeShell(cmd2.Cmd):
                                 contains=args.contains,
                                 node=self._current_node)
 
+    def do_cd(self, args):
+        """Change directory"""
+        path = args
+        if not path:
+            path = os.path.expanduser("~")
+        os.chdir(path)
+
+    @with_default_argparse
+    def do_pwd(self, arg):
+        """Return the current workding directory"""
+        self.poutput(os.getcwd())
+
     @contextlib.contextmanager
     def verdi_isolate(self):
         """A context manager that sets up the isolation for invoking of a
