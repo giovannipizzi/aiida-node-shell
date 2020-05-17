@@ -808,20 +808,29 @@ class AiiDANodeShell(cmd2.Cmd):
                             default='.',
                             help="The path to the file to output",
                             completer_method=repo_cat_completer_method)
+    cat_parser.add_argument('--byte',
+                            '-b',
+                            help='Open in byte mode',
+                            action='store_true')
 
     @needs_node
     @cmd2.with_argparser(cat_parser)
     def do_repo_cat(self, arg):
         """Echo on screen the content of a file in the repository of the current node."""
+        mode = 'rb' if arg.byte else 'r'
         try:
-            content = self._current_node.get_object_content(arg.PATH)
+            content = self._current_node.get_object_content(arg.PATH,
+                                                            mode=mode)
         except IsADirectoryError:
             self.perror("Error: '{}' is a directory".format(arg.PATH))
         except FileNotFoundError:
             self.perror("Error: '{}' not found if node repository".format(
                 arg.PATH))
         else:
-            self.stdout.write(content)
+            if mode == 'rb':
+                self.stdout.buffer.write(content)
+            else:
+                self.stdout.write(content)
 
     @with_default_argparse
     @needs_node
