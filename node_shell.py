@@ -14,6 +14,7 @@ Author: Giovanni Pizzi, EPFL
 Version: 0.1
 """
 import cmd2
+from cmd2 import ansi
 import functools
 from datetime import datetime
 import pytz
@@ -21,6 +22,7 @@ import sys
 import re
 from traceback import print_exc
 from pprint import pformat
+from collections import namedtuple
 
 from ago import human
 import click
@@ -81,11 +83,20 @@ def needs_new_node(f):
         # Reloading only makes sense for unsealed process
         if isinstance(current_node, ProcessNode):
             if not current_node.is_sealed:
-                self.do_reload()
+                self.do_reload('')
         return f(self, *args, **kwds)
 
     return wrapper
 
+
+LinkInfo = namedtuple('LinkInfo', ('direction', 'type', 'label'))
+HistInfo = namedtuple('HistInfo', ('node', 'desc', 'linkinfo'))
+
+yellow = functools.partial(ansi.style, fg=ansi.fg.bright_yellow)
+blue = functools.partial(ansi.style, fg=ansi.fg.bright_blue)
+green = functools.partial(ansi.style, fg=ansi.fg.bright_green)
+red = functools.partial(ansi.style, fg=ansi.fg.bright_red)
+cyan = functools.partial(ansi.style, fg=ansi.fg.cyan)
 
 class NodeHist:
     """Holds a history of the nodes"""
@@ -97,20 +108,22 @@ class NodeHist:
     @property
     def current_node(self):
         """Current node"""
-        return self.node_history[self.node_history_pointer][0]
+        return self.node_history[self.node_history_pointer].node
 
     def set_current(self, node, desc):
         """Set the current node"""
         if self.node_history and self.node_history[
-                self.node_history_pointer] == node:
+                self.node_history_pointer].node == node:
             # Loading the current node - do nothing
             return
+        # Otherwise we append the node to the history
         if self.node_history_pointer < -1:
             # Drop any 'future'
             self.node_history = self.node_history[:self.node_history_pointer +
                                                   1]
             self.node_history_pointer = -1
-        self.node_history.append([node, desc])
+        linkinfo = self.get_link_to_previous(node)
+        self.node_history.append(HistInfo(node, desc, linkinfo))
 
     def go_back(self):
         """Go backward in the history"""
@@ -130,14 +143,70 @@ class NodeHist:
 
     def show_hist(self, cmd_shell=None):
         """Print the history of loaded nodes"""
-        output = cmd_shell.stdout if cmd_shell else None
         n_hist = len(self.node_history)
-        current_node = n_hist + self.node_history_pointer
+        current_pos = n_hist + self.node_history_pointer
+        data_list = []
         for i, hist in enumerate(self.node_history):
-            if i != current_node:
-                print(hist[1], file=output)
+            here_mark = yellow('<-- We are here') if i == current_pos else ''
+            node_line = '{} {} {}'.format(hist.desc, hist.node.label, here_mark)
+            link_lines = []
+            if hist.linkinfo is not None:
+                # User unicode symbols for direction
+                if hist.linkinfo.direction == '<':
+                    link_direction = red('  🢁  ')
+                else:
+                    link_direction = green('  🢃  ')
+                link_line = '---  [{}] {}'.format(hist.linkinfo.label, hist.linkinfo.type)
             else:
-                print(hist[1], '   <--- We are here', file=output)
+                link_direction = '  ✖  '
+                link_line = ''
+            if i > 0:
+                link_line = link_direction + cyan(link_line)
+                data_list.append(link_line)
+
+            # Only add link from the second node
+            if i > 0:
+                data_list.extend(link_lines)
+            data_list.append(node_line)
+
+        cmd2.ansi.style_aware_write(sys.stdout, '\n'.join(data_list) + '\n')
+
+    def get_link_to_previous(self, current_node):
+        """Get the link to the previous node"""
+        from aiida.orm import QueryBuilder, Node
+        from aiida.orm.utils.loaders import NodeEntityLoader
+
+        try:
+            previous_node = self.node_history[self.node_history_pointer].node
+        except IndexError:
+            # No previous node found so there is certain no link to show
+            return
+
+        # From previous to current
+        direction = None
+        q = QueryBuilder()
+        q.append(Node, filters={'id': previous_node.pk})
+        q.append(Node, filters={'id': current_node.pk}, edge_project=['type', 'label'])
+        res = q.all()
+        # Sort by type, then label
+        if res:
+            direction = '>'
+        else:
+            # Now try from current to previous
+            q = QueryBuilder()
+            q.append(Node, filters={'id': current_node.pk})
+            q.append(Node, filters={'id': previous_node.pk}, edge_project=['type', 'label'])
+            res = q.all()
+            if res:
+                direction = '<'
+        # Stop here if no link is found
+        if direction is None:
+            return 
+        # Now we have a link
+        res.sort(key=lambda x: (x[0], x[1]))
+        ltype, llabel = res[0]
+        return LinkInfo(direction, ltype.upper(), llabel)
+
 
 
 class AiiDANodeShell(cmd2.Cmd):
@@ -199,7 +268,7 @@ class AiiDANodeShell(cmd2.Cmd):
         """Load a node in the shell, making it the 'current node'."""
         # When loading the node I reset the history
         self._set_current_node(arg)
-        self._node_hist.set_current(arg, self._get_node_string())
+        self._node_hist.set_current(self._current_node, self._get_node_string())
 
     @needs_node
     def do_reload(self, arg):
@@ -217,20 +286,20 @@ class AiiDANodeShell(cmd2.Cmd):
         """Back to the previous node"""
         for _ in range(arg.steps):
             self._node_hist.go_back()
-        self._set_current_node(self._node_hist.current_node)
+        self._set_current_node(self._node_hist.current_node.pk)
 
     @cmd2.with_argparser(move_parser)
     def do_nodehist_forward(self, arg):
         """Go forward in the node history"""
         for _ in range(arg.steps):
             self._node_hist.go_forward()
-        self._set_current_node(self._node_hist.current_node)
+        self._set_current_node(self._node_hist.current_node.pk)
 
     @with_default_argparse
     def do_nodehist_last(self, arg):
         """Go forward in the node history"""
         self._node_hist.go_last()
-        self._set_current_node(self._node_hist.current_node)
+        self._set_current_node(self._node_hist.current_node.pk)
 
     @with_default_argparse
     def do_nodehist_show(self, arg):
