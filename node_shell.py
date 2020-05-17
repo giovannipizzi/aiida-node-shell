@@ -745,52 +745,46 @@ class AiiDANodeShell(cmd2.Cmd):
             print_exc(file=output)
 
     group_parser = cmd2.Cmd2ArgumentParser()
-    group_subparser = group_parser.add_subparsers(title='subcommands')
-    groupls_parser = group_subparser.add_parser('list', add_help=False)
 
-    groupls_parser.add_argument('--user-email', '-u', help='Filter by user')
-    groupls_parser.add_argument('--all-users',
+    group_parser.add_argument('--user-email', '-u', help='Filter by user')
+    group_parser.add_argument('--all-users',
                                 help='Flag if include all users',
                                 action='store_true')
-    groupls_parser.add_argument('--all-types',
+    group_parser.add_argument('--all-types',
                                 '-a',
                                 help='Flag if include all types',
                                 action='store_true')
-    groupls_parser.add_argument('--group-type',
+    group_parser.add_argument('--group-type',
                                 '-t',
                                 default=GroupTypeString.USER.value,
                                 help='Filter by type')
-    groupls_parser.add_argument('--with-description',
+    group_parser.add_argument('--with-description',
                                 '-d',
                                 help='Show also the decription',
                                 action='store_true')
-    groupls_parser.add_argument('--startswith',
+    group_parser.add_argument('--startswith',
                                 '-s',
                                 help='Filter by the initial string')
-    groupls_parser.add_argument('--endswith',
+    group_parser.add_argument('--endswith',
                                 '-e',
                                 help='Filter by ending string')
-    groupls_parser.add_argument(
+    group_parser.add_argument(
         '--contains',
         '-c',
         help='Filter by checking if the group name contains the string')
-    groupls_parser.add_argument(
+    group_parser.add_argument(
         '--past-days',
         '-p',
         type=int,
         help='Filter by only including those created in the past N days')
-    groupls_parser.add_argument(
+    group_parser.add_argument(
         '--count',
         '-C',
         action='store_true',
         help='Show also the number of nodes in the group')
 
-    groupbelong_parser = group_subparser.add_parser(
-        'belong',
-        help='List groups the current node belongs to.',
-        parents=[groupls_parser])
-
-    def group_list(self, args):
+    @cmd2.with_argparser(group_parser)
+    def do_group_list(self, args):
         """Command for list groups"""
         from aiida.cmdline.commands.cmd_group import group_list
         group_list.callback(all_users=args.all_users,
@@ -805,7 +799,8 @@ class AiiDANodeShell(cmd2.Cmd):
                             contains=args.contains,
                             node=None)
 
-    def group_belong(self, args):
+    @cmd2.with_argparser(group_parser)
+    def do_group_belong(self, args):
         """Command for list groups"""
         from aiida.cmdline.commands.cmd_group import group_list
         group_list.callback(all_users=args.all_users,
@@ -819,18 +814,6 @@ class AiiDANodeShell(cmd2.Cmd):
                             endswith=args.endswith,
                             contains=args.contains,
                             node=self._current_node)
-
-    groupls_parser.set_defaults(func=group_list)
-    groupbelong_parser.set_defaults(func=group_belong)
-
-    @cmd2.with_argparser(group_parser)
-    def do_group(self, args):
-        """Group command"""
-        func = getattr(args, 'func', None)
-        if func is not None:
-            func(self, args)
-        else:
-            self.do_help('group')
 
 
 def expand_node_subsitute(arg, hist_obj):
