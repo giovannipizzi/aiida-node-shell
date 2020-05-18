@@ -148,11 +148,13 @@ class NodeHist:
         n_hist = len(self.node_history)
         current_pos = n_hist + self.node_history_pointer
         data_list = []
+        # Define the indentation
+        indent = ' | '
+        link_indent = '  '
         for i, hist in enumerate(self.node_history):
             here_mark = yellow('<-- We are here') if i == current_pos else ''
             node_line = '{} {} {}'.format(hist.desc, hist.node.label,
                                           here_mark)
-            link_lines = []
             if hist.linkinfo is not None:
                 # User unicode symbols for direction
                 if hist.linkinfo.direction == '<':
@@ -164,14 +166,12 @@ class NodeHist:
             else:
                 link_direction = '  ✖  '
                 link_line = ''
+            # Only add link if there is a previous node
             if i > 0:
-                link_line = link_direction + cyan(link_line)
-                data_list.append(link_line)
+                link_line = link_indent + link_direction + cyan(link_line)
+                data_list.append(indent + link_line)
 
-            # Only add link from the second node
-            if i > 0:
-                data_list.extend(link_lines)
-            data_list.append(node_line)
+            data_list.append(indent + node_line)
         if cmd is None:
             cmd2.ansi.style_aware_write(sys.stdout,
                                         '\n'.join(data_list) + '\n')
