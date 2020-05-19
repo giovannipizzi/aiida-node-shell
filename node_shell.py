@@ -70,24 +70,28 @@ def needs_node(f):
     return wrapper
 
 
-def needs_new_node(f):
+def needs_new_node(always=False):
     """Decorator to mark the command prefers to have the node reloaded.
     The node will be only be reloaded if it is an unsealed ProcessNode.
     """
-    @needs_node
-    @functools.wraps(f)
-    def wrapper(self, *args, **kwds):
-        """Reload self._current_node"""
-        from aiida.orm.utils.loaders import NodeEntityLoader
-        from aiida.orm import ProcessNode
-        current_node = self._current_node
-        # Reloading only makes sense for unsealed process
-        if isinstance(current_node, ProcessNode):
-            if not current_node.is_sealed:
+    def _wrapper(f):
+        @needs_node
+        @functools.wraps(f)
+        def wrapper(self, *args, **kwds):
+            """Reload self._current_node"""
+            from aiida.orm.utils.loaders import NodeEntityLoader
+            from aiida.orm import ProcessNode
+            if always:
                 self.do_reload('')
-        return f(self, *args, **kwds)
-
-    return wrapper
+            else:
+                # Reloading only for unsealed process
+                current_node = self._current_node
+                if isinstance(current_node, ProcessNode):
+                    if not current_node.is_sealed:
+                        self.do_reload('')
+                return f(self, *args, **kwds)
+        return wrapper
+    return _wrapper
 
 
 LinkInfo = namedtuple('LinkInfo', ('direction', 'type', 'label'))
@@ -230,7 +234,7 @@ class AiiDANodeShell(cmd2.Cmd):
         """Initialise a shell, possibly with a given node preloaded."""
         super().__init__(*args, use_ipython=True, **kwargs)
         self.self_in_py = True
-        self.allow_style = cmd2.ansi.STYLE_TERMINAL
+        self = cmd2.ansi.STYLE_TERMINAL
 
         if node_identifier:
             self._set_current_node(node_identifier)
@@ -332,7 +336,7 @@ class AiiDANodeShell(cmd2.Cmd):
     setter_args = cmd2.Cmd2ArgumentParser()
     setter_args.add_argument('--set', '-s', help='Set the property')
 
-    @needs_new_node
+    @needs_new_node(always=True)
     @cmd2.with_argparser(setter_args)
     def do_label(self, arg):  # pylint: disable=unused-argument
         """Show the label of the current node."""
@@ -343,7 +347,7 @@ class AiiDANodeShell(cmd2.Cmd):
         else:
             self.poutput(self._current_node.label)
 
-    @needs_node
+    @needs_new_node(always=True)
     @cmd2.with_argparser(setter_args)
     def do_description(self, arg):  # pylint: disable=unused-argument
         """Show the description of the current node."""
@@ -362,7 +366,7 @@ class AiiDANodeShell(cmd2.Cmd):
         self.poutput("Created {} ({})".format(human(now_aware() - ctime),
                                               ctime))
 
-    @needs_new_node
+    @needs_new_node(always=True)
     @with_default_argparse
     def do_mtime(self, arg):  # pylint: disable=unused-argument
         """Show the last modification time of the current node."""
@@ -370,7 +374,7 @@ class AiiDANodeShell(cmd2.Cmd):
         self.poutput("Last modified {} ({})".format(human(now_aware() - mtime),
                                                     mtime))
 
-    @needs_new_node
+    @needs_new_node(always=True)
     @with_default_argparse
     def do_extras(self, arg):  # pylint: disable=unused-argument
         """Show all extras of the current node (keys and values)."""
@@ -395,7 +399,7 @@ class AiiDANodeShell(cmd2.Cmd):
         default=2,
         help='Set the number of spaces to indent each level by')
 
-    @needs_new_node
+    @needs_new_node()
     @cmd2.with_argparser(report_args)
     def do_report(self, arg):  # pylint: disable=unused-argument
         """Show the report, if the node is a ProcessNode"""
@@ -537,7 +541,7 @@ class AiiDANodeShell(cmd2.Cmd):
                                  help='The extra key',
                                  choices_method=extras_choices_method)
 
-    @needs_new_node
+    @needs_new_node(always=True)
     @cmd2.with_argparser(extrakey_parser)
     def do_extra(self, arg):
         """Show one extra of the current node."""
@@ -559,7 +563,7 @@ class AiiDANodeShell(cmd2.Cmd):
         for key in sorted(extras_keys):
             self.poutput('- {}'.format(key))
 
-    @needs_new_node
+    @needs_new_node(always=True)
     @with_default_argparse
     def do_attrs(self, arg):  # pylint: disable=unused-argument
         """Show all attributes (keys and values) of the current node."""
@@ -591,7 +595,7 @@ class AiiDANodeShell(cmd2.Cmd):
                                 help='The attribute key',
                                 choices_method=attrs_choices_method)
 
-    @needs_new_node
+    @needs_new_node(always=True)
     @cmd2.with_argparser(attrkey_parser)
     def do_attr(self, arg):
         """Show one attribute of the current node."""
@@ -603,7 +607,7 @@ class AiiDANodeShell(cmd2.Cmd):
             self.poutput("No attribute with key '{}'".format(
                 arg.attribute_key))
 
-    @needs_new_node
+    @needs_new_node(always=True)
     @with_default_argparse
     def do_attrkeys(self, arg):  # pylint: disable=unused-argument
         """Show the keys of all attributes of the current node."""
@@ -625,7 +629,7 @@ class AiiDANodeShell(cmd2.Cmd):
                              help='Follow this link to the next node',
                              type=int)
 
-    @needs_new_node
+    @needs_new_node()
     @cmd2.with_argparser(link_parser)
     def do_in(self, arg):
         """List all nodes connected with incoming links to the current node. 
@@ -661,7 +665,7 @@ class AiiDANodeShell(cmd2.Cmd):
             self._node_hist.set_current(self._current_node,
                                         self._get_node_string())
 
-    @needs_new_node
+    @needs_new_node()
     @cmd2.with_argparser(link_parser)
     def do_out(self, arg):
         """List all nodes connected with outgoing links to the current node. 
@@ -697,7 +701,7 @@ class AiiDANodeShell(cmd2.Cmd):
             self._node_hist.set_current(self._current_node,
                                         self._get_node_string())
 
-    @needs_new_node
+    @needs_new_node(always=True)
     @with_default_argparse
     def do_show(self, arg):  # pylint: disable=unused-argument
         """Show textual information on the current node."""
@@ -866,7 +870,7 @@ class AiiDANodeShell(cmd2.Cmd):
     graph_gen_parser.add_argument('--output-format', '-f', default='pdf')
     graph_gen_parser.add_argument('--show', '-s', action='store_true')
 
-    @needs_new_node
+    @needs_new_node()
     @cmd2.with_argparser(graph_gen_parser)
     def do_graph_generate(self, arg):
         """Generate the provenance graph for the current node.
