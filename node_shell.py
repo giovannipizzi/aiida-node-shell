@@ -20,16 +20,21 @@ from cmd2 import ansi
 import functools
 from datetime import datetime
 import pytz
+import io
 import sys
+import os
 import re
+import shlex
 from traceback import print_exc
 from pprint import pformat
 from collections import namedtuple
 import contextlib
+import argparse
 
 from ago import human
 import click
 
+from cmd2.utils import basic_complete
 from aiida.common.links import LinkType
 from aiida.cmdline.commands.cmd_verdi import verdi
 from aiida.orm.utils.repository import FileType
@@ -235,6 +240,20 @@ class AiiDANodeShell(cmd2.Cmd):
 
     def __init__(self, *args, node_identifier=None, **kwargs):
         """Initialise a shell, possibly with a given node preloaded."""
+        from aiida.manage.configuration import get_config
+
+        # If I can reach the AiiDA config directory, I set a history
+        # In this way, the history is different if different
+        # virtualenvs define a different AIIDA_PATH. Note that this is
+        # still the same for all profiles in that virtualenv (which is
+        # probably OK). Otherwise we would need to insert the profile
+        # name in the history file to have a different history per profile,
+        # but probably this is not needed.
+        aiida_config_dir_path = get_config().dirpath
+        if os.path.isdir(aiida_config_dir_path):
+            kwargs['persistent_history_file'] = os.path.join(
+                aiida_config_dir_path, 'node-shell-history.dat')
+
         super().__init__(*args, use_ipython=True, **kwargs)
         self.self_in_py = True
         self = cmd2.ansi.STYLE_TERMINAL
@@ -248,20 +267,23 @@ class AiiDANodeShell(cmd2.Cmd):
         self._current_node = NodeEntityLoader.load_entity(identifier)
 
     @property
-    def current_profile(self):
-        """Return a string with the current profile name (or 'NO_PROFILE' if no profile is loaded)."""
+    def _current_profile_object(self):
+        """Get the current AiiDA profile object, or None if not set."""
         from aiida.manage.configuration import get_config
 
         # Caching
         if not self._current_profile:
-            current_profile = get_config().current_profile
-            if current_profile:
-                self._current_profile = current_profile.name
-
-        if not self._current_profile:
-            return "NO_PROFILE"
+            self._current_profile = get_config().current_profile
 
         return self._current_profile
+
+    @property
+    def current_profile(self):
+        """Return a string with the current profile name (or 'NO_PROFILE' if no profile is loaded)."""
+        current_profile_object = self._current_profile_object
+        if not current_profile_object:
+            return "NO_PROFILE"
+        return current_profile_object.name
 
     def _get_node_string(self, node=None):
         """Return a string representing the current node (to be used in the prompt)."""
@@ -862,6 +884,81 @@ class AiiDANodeShell(cmd2.Cmd):
     #    'To be implemented in case we want to manipulate the line'
     #    #line = line.lower()
     #    return line
+
+    def get_verdi_completion(self, arg_pieces):
+        """Call the click verdi completion command.
+
+        This requires preparing the environment as reqired by click when going
+        through bash completion.
+
+        Note if you are looking into the code: don't look only in click, but also
+        in the code mokey-patched by click-completion!
+        https://github.com/click-contrib/click-completion/blob/master/click_completion/patch.py
+
+        For this reason, for now I go via the BASH environment variables, that seems
+        less prone to code changes in the immediate future.
+        """
+        # Additional environment variables
+        added_env = {}
+        # Use a TAB as a separator
+        added_env['IFS'] = r"$'\t'"
+        # Variable needed by click to perform tab completion
+        added_env['_VERDI_COMPLETE'] = "complete-bash"
+
+        # Prepare the pieces
+        comp_words = "verdi " + " ".join(shlex.quote(arg_piece) for arg_piece in arg_pieces)
+        pos = len(arg_pieces)
+        added_env['COMP_WORDS']= comp_words
+        added_env['COMP_CWORD'] = str(pos)
+
+        try:
+            my_stdout = io.StringIO()
+            with self.verdi_isolate(added_env, my_stdout):
+                verdi.main(args=[], prog_name='verdi')
+        except SystemExit:
+            # SystemExit means the command-line tool finished as intented
+            my_stdout.seek(0)
+            pieces = my_stdout.read().split('\t')
+            # Manual attempt to unescape... Not perfect, and might break in the future :-(
+            # But for now I'm reverting what is done here:
+            # https://github.com/click-contrib/click-completion/blob/6e08a5fa43149c822152d40c07e00be5ec2c5c7e/click_completion/core.py#L170
+            # namely re.sub(r"""([\s\\"'()])""", r'\\\1', opt)
+            # i.e. it's prepending a backslash to the following characters:
+            # - a space-like character
+            # - a backslash
+            # - a double quote
+            # - a single quote
+            # open and closed brackets: ( )
+            pieces = [re.sub(r"""\\([\s\\"'()])""", r'\1', piece) for piece in pieces]
+            return pieces
+        except Exception:
+            ## IGNORE EXCEPTIONS DURING COMPLETION
+            # In any case, it'd be good if quickly fix this issue first:
+            # https://github.com/aiidateam/aiida-core/issues/3815
+            # (but I would still keep this logic here to ignore possible exceptions)
+            return []
+        return []
+
+    def verdi_args_completer_method(self, text, line, begidx, endidx, arg_tokens):  # pylint: disable=too-many-arguments
+        """Method to perform completion for the 'verdi' command.
+
+        This pipes through the Bash completion via click."""
+        match_against = self.get_verdi_completion(arg_tokens['args'])
+        complete_vals = basic_complete(text, line, begidx, endidx, match_against)
+        # This apparently happens if there is no completion
+        # Actually in bash this sometimes triggers file completion; to check
+        # if we want to investigate using self.path_complete here (but it does not
+        # make sense in many cases, see e.g. 'verdi group list')
+        if complete_vals == ['']:
+            complete_vals = []
+        return complete_vals
+
+    verdi_complete_parser = cmd2.Cmd2ArgumentParser()
+    verdi_complete_parser.add_argument('args', nargs=argparse.REMAINDER,
+                                    suppress_tab_hint=True,
+                                    completer_method=verdi_args_completer_method)
+
+    @cmd2.with_argparser(verdi_complete_parser)
     def do_verdi(self, arg):
         """Run verdi commands using the current profile.
         The argument will be passed to ``verdi`` as it is, except that {} will be 
@@ -873,7 +970,11 @@ class AiiDANodeShell(cmd2.Cmd):
         # Here I force verdi to use the current profile, otherwise the
         # command won't work for the node shell launched with non-default profile
         verdi_args = ['-p', self.current_profile]
-        passed_args = expand_node_subsitute(arg, self._node_hist).split()
+        try:
+            passed_args = [expand_node_subsitute(the_arg, self._node_hist) for the_arg in arg.args]
+        except RuntimeError as exc:
+            self.poutput(str(exc))
+            return
 
         if passed_args:
             # Print help for this command (not verdi)
@@ -1026,21 +1127,29 @@ class AiiDANodeShell(cmd2.Cmd):
             self._in_py = False
 
     @contextlib.contextmanager
-    def verdi_isolate(self):
+    def verdi_isolate(self, new_env_vars=None, custom_stdout=None):
         """A context manager that sets up the isolation for invoking of a
         command line tool. The sys.stdin and sys.sydout are temporarily redirected
         to self.stdout, self.stderr. This is useful for calling verdi commends that
         writes directly to stdout and stderr
         """
-
         old_stdout = sys.stdout
+        old_env = os.environ.copy()
 
-        sys.stdout = self.stdout
+        if new_env_vars:
+            for key, val in new_env_vars.items():
+                os.environ[key] = val
+
+        if custom_stdout:
+            sys.stdout = custom_stdout
+        else:
+            sys.stdout = self.stdout
 
         try:
             yield
         finally:
             sys.stdout = old_stdout
+            os.environ = old_env
 
 
 def expand_node_subsitute(arg, hist_obj):
@@ -1059,8 +1168,15 @@ def expand_node_subsitute(arg, hist_obj):
         try:
             node = hist_obj.node_history[pointer].node
         except IndexError:
-            raise RuntimeError('Invalid offset {} in argument {}'.format(
-                pointer, arg))
+            if hist_obj.node_history:
+                how_many = (
+                    "are {} nodes".format(len(hist_obj.node_history)) if len(hist_obj.node_history) != 1
+                    else "is 1 node")
+                raise RuntimeError(
+            'Invalid offset in argument "{}" for node history '
+            '(there {} in the history)'.format(arg, how_many))
+            raise RuntimeError('No node in node history, you need to load a node before using it in argument "{}"'.format(arg))
+
         # Replace the line
         else:
             arg = arg.replace(whole_str, str(node.pk))
@@ -1088,7 +1204,9 @@ if __name__ == '__main__':
 
         while True:
             try:
-                sys.exit(shell.cmdloop())
+                retcode = shell.cmdloop()
+                print()
+                sys.exit(retcode)
                 break
             except KeyboardInterrupt:  # CTRL+C pressed
                 # Ignore CTRL+C
