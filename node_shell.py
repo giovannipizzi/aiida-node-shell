@@ -90,7 +90,9 @@ def needs_new_node(always=False):
                     if not current_node.is_sealed:
                         self.do_reload('')
                 return f(self, *args, **kwds)
+
         return wrapper
+
     return _wrapper
 
 
@@ -855,41 +857,6 @@ class AiiDANodeShell(cmd2.Cmd):
         """Exit the shell."""
         return True
 
-    graph_gen_parser = cmd2.Cmd2ArgumentParser()
-    graph_gen_parser.add_argument('--link-types', '-l', default='all')
-    graph_gen_parser.add_argument(
-        '--identifier',
-        default='uuid',
-    )
-    graph_gen_parser.add_argument('--ancestor-depth', type=int)
-    graph_gen_parser.add_argument('--descendant-depth', type=int)
-    graph_gen_parser.add_argument('--process-out', action='store_true')
-    graph_gen_parser.add_argument('--process-in', action='store_true')
-    graph_gen_parser.add_argument('--verbose', action='store_true')
-    graph_gen_parser.add_argument('--engine', '-e', default='dot')
-    graph_gen_parser.add_argument('--output-format', '-f', default='pdf')
-    graph_gen_parser.add_argument('--show', '-s', action='store_true')
-
-    @needs_new_node()
-    @cmd2.with_argparser(graph_gen_parser)
-    def do_graph_generate(self, arg):
-        """Generate the provenance graph for the current node.
-        For comprehensive help information, try 'verdi node graph generate --help'.
-        """
-        from aiida.cmdline.commands.cmd_node import graph_generate
-        with self.verdi_isolate():
-            graph_generate.callback(root_node=self._current_node,
-                                    link_types=arg.link_types,
-                                    identifier=arg.identifier,
-                                    ancestor_depth=arg.ancestor_depth,
-                                    descendant_depth=arg.descendant_depth,
-                                    process_out=arg.process_out,
-                                    process_in=arg.process_in,
-                                    engine=arg.engine,
-                                    verbose=arg.verbose,
-                                    output_format=arg.output_format,
-                                    show=arg.show)
-
     #def precmd(self, line):
     #    'To be implemented in case we want to manipulate the line'
     #    #line = line.lower()
@@ -978,23 +945,6 @@ class AiiDANodeShell(cmd2.Cmd):
         help='Show also the number of nodes in the group')
 
     @cmd2.with_argparser(group_parser)
-    def do_group_list(self, args):
-        """Command for list groups"""
-        from aiida.cmdline.commands.cmd_group import group_list
-        with self.verdi_isolate():
-            group_list.callback(all_users=args.all_users,
-                                user_email=args.user_email,
-                                all_types=args.all_types,
-                                group_type=args.group_type,
-                                with_description=args.with_description,
-                                count=args.count,
-                                past_days=args.past_days,
-                                startswith=args.startswith,
-                                endswith=args.endswith,
-                                contains=args.contains,
-                                node=None)
-
-    @cmd2.with_argparser(group_parser)
     @needs_node
     def do_group_belong(self, args):
         """Command for list groups"""
@@ -1027,7 +977,7 @@ class AiiDANodeShell(cmd2.Cmd):
         self.poutput(os.getcwd())
 
     @with_default_argparse
-    def do_vshell(self, _):
+    def do_verdi_shell(self, _):
         """Enter an ipython shell simimlar to that launched by `verdi shell`
         """
         from cmd2.py_bridge import PyBridge
@@ -1039,6 +989,9 @@ class AiiDANodeShell(cmd2.Cmd):
             """
             from aiida.cmdline.utils.shell import get_start_namespace
             from IPython import embed
+            from traitlets.config import get_config
+            conf = get_config()
+            conf.InteractiveShellEmbed.colors = "Linux"
 
             # Create a variable pointing to py_bridge
             exec("{} = py_bridge".format(cmd2_app.py_bridge_name))
@@ -1060,10 +1013,10 @@ class AiiDANodeShell(cmd2.Cmd):
             embed(banner1=(
                 'Entering an embedded verdi shell. Type quit or <Ctrl>-d to exit.\n'
                 'Run Python code from external files with: run filename.py\n'
-                'If the color is not on, you can enable it using line magic \'%colors linux\'\n'
                 'The loaded node \'{}\' can be accessed with \'current_node\'\n'
                 .format(_cnode_string)),
-                  exit_msg='Leaving verdi shell, back to the node shell')
+                  exit_msg='Leaving verdi shell, back to the node shell',
+                  config=conf)
 
         if self.in_pyscript():
             self.perror(
