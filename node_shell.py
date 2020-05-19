@@ -9,8 +9,9 @@ a much more intuitive interface (even if more limited) than the python API.
 
 More details in the README.md file.
 
-Author: Giovanni Pizzi, EPFL
-Contributor: Bonan Zhu
+Authors: 
+  Giovanni Pizzi, EPFL
+  Bonan Zhu, UCL
 
 Version: 0.1
 """
@@ -905,62 +906,55 @@ class AiiDANodeShell(cmd2.Cmd):
                 'Verdi Command raised an exception {}'.format(exception))
             print_exc(file=self.stdout)
 
-    group_parser = cmd2.Cmd2ArgumentParser()
-
-    group_parser.add_argument('--user-email', '-u', help='Filter by user')
-    group_parser.add_argument('--all-users',
-                              help='Flag if include all users',
-                              action='store_true')
-    group_parser.add_argument('--all-types',
-                              '-a',
-                              help='Flag if include all types',
-                              action='store_true')
-    group_parser.add_argument('--group-type',
-                              '-t',
-                              default=GroupTypeString.USER.value,
-                              help='Filter by type')
-    group_parser.add_argument('--with-description',
-                              '-d',
-                              help='Show also the decription',
-                              action='store_true')
-    group_parser.add_argument('--startswith',
-                              '-s',
-                              help='Filter by the initial string')
-    group_parser.add_argument('--endswith',
-                              '-e',
-                              help='Filter by ending string')
-    group_parser.add_argument(
-        '--contains',
+    group_belong_parser = cmd2.Cmd2ArgumentParser()
+    group_belong_parser.add_argument('--with-description',
+                                     '-d',
+                                     help='Show also the decription',
+                                     action='store_true')
+    group_belong_parser.add_argument(
+        '--with-count',
         '-c',
-        help='Filter by checking if the group name contains the string')
-    group_parser.add_argument(
-        '--past-days',
-        '-p',
-        type=int,
-        help='Filter by only including those created in the past N days')
-    group_parser.add_argument(
-        '--count',
-        '-C',
-        action='store_true',
-        help='Show also the number of nodes in the group')
+        help='Show also the number of nodes in each group',
+        action='store_true')
 
-    @cmd2.with_argparser(group_parser)
     @needs_node
+    @cmd2.with_argparser(group_belong_parser)
     def do_group_belong(self, args):
         """Command for list groups"""
-        from aiida.cmdline.commands.cmd_group import group_list
-        with self.verdi_isolate():
-            group_list.callback(all_users=args.all_users,
-                                user_email=args.user_email,
-                                all_types=args.all_types,
-                                group_type=args.group_type,
-                                with_description=args.with_description,
-                                count=args.count,
-                                past_days=args.past_days,
-                                startswith=args.startswith,
-                                endswith=args.endswith,
-                                contains=args.contains,
-                                node=self._current_node)
+        from aiida.orm import QueryBuilder, Node, Group
+        from tabulate import tabulate
+
+        q = QueryBuilder()
+        q.append(Node, filters={'id': self._current_node.pk})
+        q.append(Group, with_node=Node, project=['*'])
+
+        projection_lambdas = {
+            'pk': lambda group: str(group.pk),
+            'label': lambda group: group.label,
+            'type_string': lambda group: group.type_string,
+            'count': lambda group: group.count(),
+            'user': lambda group: group.user.email.strip(),
+            'description': lambda group: group.description
+        }
+
+        table = []
+        projection_header = ['PK', 'Label', 'Type string', 'User']
+        projection_fields = ['pk', 'label', 'type_string', 'user']
+
+        if args.with_count:
+            projection_header.append('Node Count')
+            projection_fields.append('count')
+
+        if args.with_description:
+            projection_header.append('Description')
+            projection_fields.append('description')
+
+        for (group, ) in q.all():
+            table.append([
+                projection_lambdas[field](group) for field in projection_fields
+            ])
+
+        self.poutput(tabulate(table, headers=projection_header))
 
     def do_cd(self, args):
         """Change directory"""
