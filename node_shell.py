@@ -95,10 +95,8 @@ def needs_new_node(always=False):
                 if isinstance(current_node, ProcessNode):
                     if not current_node.is_sealed:
                         self.do_reload('')
-                return f(self, *args, **kwds)
-
+            return f(self, *args, **kwds)
         return wrapper
-
     return _wrapper
 
 
@@ -906,9 +904,10 @@ class AiiDANodeShell(cmd2.Cmd):
         added_env['_VERDI_COMPLETE'] = "complete-bash"
 
         # Prepare the pieces
-        comp_words = "verdi " + " ".join(shlex.quote(arg_piece) for arg_piece in arg_pieces)
+        comp_words = "verdi " + " ".join(
+            shlex.quote(arg_piece) for arg_piece in arg_pieces)
         pos = len(arg_pieces)
-        added_env['COMP_WORDS']= comp_words
+        added_env['COMP_WORDS'] = comp_words
         added_env['COMP_CWORD'] = str(pos)
 
         try:
@@ -929,7 +928,9 @@ class AiiDANodeShell(cmd2.Cmd):
             # - a double quote
             # - a single quote
             # open and closed brackets: ( )
-            pieces = [re.sub(r"""\\([\s\\"'()])""", r'\1', piece) for piece in pieces]
+            pieces = [
+                re.sub(r"""\\([\s\\"'()])""", r'\1', piece) for piece in pieces
+            ]
             return pieces
         except Exception:
             ## IGNORE EXCEPTIONS DURING COMPLETION
@@ -939,12 +940,14 @@ class AiiDANodeShell(cmd2.Cmd):
             return []
         return []
 
-    def verdi_args_completer_method(self, text, line, begidx, endidx, arg_tokens):  # pylint: disable=too-many-arguments
+    def verdi_args_completer_method(self, text, line, begidx, endidx,
+                                    arg_tokens):  # pylint: disable=too-many-arguments
         """Method to perform completion for the 'verdi' command.
 
         This pipes through the Bash completion via click."""
         match_against = self.get_verdi_completion(arg_tokens['args'])
-        complete_vals = basic_complete(text, line, begidx, endidx, match_against)
+        complete_vals = basic_complete(text, line, begidx, endidx,
+                                       match_against)
         # This apparently happens if there is no completion
         # Actually in bash this sometimes triggers file completion; to check
         # if we want to investigate using self.path_complete here (but it does not
@@ -954,9 +957,11 @@ class AiiDANodeShell(cmd2.Cmd):
         return complete_vals
 
     verdi_complete_parser = cmd2.Cmd2ArgumentParser()
-    verdi_complete_parser.add_argument('args', nargs=argparse.REMAINDER,
-                                    suppress_tab_hint=True,
-                                    completer_method=verdi_args_completer_method)
+    verdi_complete_parser.add_argument(
+        'args',
+        nargs=argparse.REMAINDER,
+        suppress_tab_hint=True,
+        completer_method=verdi_args_completer_method)
 
     @cmd2.with_argparser(verdi_complete_parser)
     def do_verdi(self, arg):
@@ -971,7 +976,10 @@ class AiiDANodeShell(cmd2.Cmd):
         # command won't work for the node shell launched with non-default profile
         verdi_args = ['-p', self.current_profile]
         try:
-            passed_args = [expand_node_subsitute(the_arg, self._node_hist) for the_arg in arg.args]
+            passed_args = [
+                expand_node_subsitute(the_arg, self._node_hist)
+                for the_arg in arg.args
+            ]
         except RuntimeError as exc:
             self.poutput(str(exc))
             return
@@ -1169,13 +1177,15 @@ def expand_node_subsitute(arg, hist_obj):
             node = hist_obj.node_history[pointer].node
         except IndexError:
             if hist_obj.node_history:
-                how_many = (
-                    "are {} nodes".format(len(hist_obj.node_history)) if len(hist_obj.node_history) != 1
-                    else "is 1 node")
+                how_many = ("are {} nodes".format(len(hist_obj.node_history))
+                            if len(hist_obj.node_history) != 1 else
+                            "is 1 node")
                 raise RuntimeError(
-            'Invalid offset in argument "{}" for node history '
-            '(there {} in the history)'.format(arg, how_many))
-            raise RuntimeError('No node in node history, you need to load a node before using it in argument "{}"'.format(arg))
+                    'Invalid offset in argument "{}" for node history '
+                    '(there {} in the history)'.format(arg, how_many))
+            raise RuntimeError(
+                'No node in node history, you need to load a node before using it in argument "{}"'
+                .format(arg))
 
         # Replace the line
         else:
