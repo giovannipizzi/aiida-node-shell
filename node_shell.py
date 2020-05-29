@@ -96,7 +96,9 @@ def needs_new_node(always=False):
                     if not current_node.is_sealed:
                         self.do_reload('')
             return f(self, *args, **kwds)
+
         return wrapper
+
     return _wrapper
 
 
@@ -586,7 +588,7 @@ class AiiDANodeShell(cmd2.Cmd):
         for key in sorted(extras_keys):
             self.poutput('- {}'.format(key))
 
-    @needs_new_node(always=True)
+    @needs_new_node()
     @with_default_argparse
     def do_attrs(self, arg):  # pylint: disable=unused-argument
         """Show all attributes (keys and values) of the current node."""
@@ -618,7 +620,7 @@ class AiiDANodeShell(cmd2.Cmd):
                                 help='The attribute key',
                                 choices_method=attrs_choices_method)
 
-    @needs_new_node(always=True)
+    @needs_new_node()
     @cmd2.with_argparser(attrkey_parser)
     def do_attr(self, arg):
         """Show one attribute of the current node."""
@@ -630,7 +632,7 @@ class AiiDANodeShell(cmd2.Cmd):
             self.poutput("No attribute with key '{}'".format(
                 arg.attribute_key))
 
-    @needs_new_node(always=True)
+    @needs_new_node()
     @with_default_argparse
     def do_attrkeys(self, arg):  # pylint: disable=unused-argument
         """Show the keys of all attributes of the current node."""
@@ -1092,9 +1094,6 @@ class AiiDANodeShell(cmd2.Cmd):
             """
             from aiida.cmdline.utils.shell import get_start_namespace
             from IPython import embed
-            from traitlets.config import get_config
-            conf = get_config()
-            conf.InteractiveShellEmbed.colors = "Linux"
 
             # Create a variable pointing to py_bridge
             exec("{} = py_bridge".format(cmd2_app.py_bridge_name))
@@ -1113,13 +1112,19 @@ class AiiDANodeShell(cmd2.Cmd):
             del py_bridge
 
             # Start ipy shell
-            embed(banner1=(
+            banner = (
                 'Entering an embedded verdi shell. Type quit or <Ctrl>-d to exit.\n'
-                'Run Python code from external files with: run filename.py\n'
-                'The loaded node \'{}\' can be accessed with \'current_node\'\n'
-                .format(_cnode_string)),
-                  exit_msg='Leaving verdi shell, back to the node shell',
-                  config=conf)
+                'Run Python code from external files with: run filename.py\n')
+
+            if _cnode_string:
+                banner += 'The loaded node \'{}\' can be accessed with \'current_node\'\n'.format(
+                    _cnode_string)
+
+            embed(
+                banner1=banner,
+                exit_msg='Leaving verdi shell, back to the node shell',
+                colors='Neutral',
+            )
 
         if self.in_pyscript():
             self.perror(
