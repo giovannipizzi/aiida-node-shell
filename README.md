@@ -25,19 +25,22 @@ The goal is not to replace neither the python API nor the `verdi commands`, but 
 interface for a number of common tasks.
 
 ## Usage
-First, install the required dependencies in you virtual environment: `pip install -r requirements.txt`.
+First, install the package, we suggest in development mode: `pip install -e .`.
 
-Then just execute the script (`./node_shell.py`) if you want to use the default profile in your environment.
+NOTE: AiiDA is not in the dependencies to avoid that installing this changes your AiiDA version, but you will need it. Also, you will need a relatively recent version of AiiDA (>=1.4.2).
+
+This will install an `aiida-node-shell` command.
+Just execute it from anywhere if you want to use the default profile in your environment.
 If you want to use a different profile, you can run with:
   ```
-  verdi -p <MY_PROFILE> run node_shell.py
+  aiida-node-shell -p <MY_PROFILE>
   ```
 
 You will get a prompt. Use the `help` command to see all commands available, or the `-h` option of every command.
 
 The guide below is a quick (but by no means complete) description of some useful commands.
 
-If you want to preload a node, add its identifier as the first command line parameter.
+If you want to preload a node, add its identifier on the command line.
 
 ## Quick start
 Here we use some example data. Actual PKs and output will of course

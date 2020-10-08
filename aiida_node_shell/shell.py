@@ -1,4 +1,3 @@
-#!/usr/bin/env runaiida
 """
 This is a proof of concept of a `verdi node shell` command to easily browse AiiDA nodes
 through an interactive, customisable shell with tab completion.
@@ -12,8 +11,6 @@ More details in the README.md file.
 Authors: 
   Giovanni Pizzi, EPFL
   Bonan Zhu, UCL
-
-Version: 0.1
 """
 import cmd2
 from cmd2 import ansi
@@ -37,9 +34,10 @@ import click
 from cmd2.utils import basic_complete
 from aiida.common.links import LinkType
 from aiida.cmdline.commands.cmd_verdi import verdi
-from aiida.orm.utils.repository import FileType
+from aiida.repository import FileType
 from aiida.orm import GroupTypeString
 # Examples for autocompletion: https://github.com/python-cmd2/cmd2/blob/master/examples/tab_autocompletion.py
+
 
 LINK_TYPES_DICT = {
     link_type.value.upper(): link_type
@@ -255,11 +253,10 @@ class AiiDANodeShell(cmd2.Cmd):
                 aiida_config_dir_path, 'node-shell-history.dat')
 
         super().__init__(*args, use_ipython=True, **kwargs)
-        self.self_in_py = True
-        self = cmd2.ansi.STYLE_TERMINAL
-
         if node_identifier:
             self._set_current_node(node_identifier)
+        self.self_in_py = True
+        self = cmd2.ansi.STYLE_TERMINAL
 
     def _set_current_node(self, identifier):
         """Set a node from an identifier."""
@@ -1197,33 +1194,3 @@ def expand_node_subsitute(arg, hist_obj):
             arg = arg.replace(whole_str, str(node.pk))
 
     return arg
-
-
-if __name__ == '__main__':
-    import os
-
-    # TODO: change this, it's not the recommended way (things written on the command line are default commands)
-    try:
-        node_identifier = sys.argv[1]
-        sys.argv = sys.argv[1:]
-    except IndexError:
-        node_identifier = None
-
-    try:
-        shell = AiiDANodeShell(
-            node_identifier=node_identifier,
-            startup_script=os.path.expanduser('~/.aiidashellrc'))
-    except Exception as exc:
-        print("ERROR: {}: {}".format(exc.__class__.__name__, exc))
-    else:
-
-        while True:
-            try:
-                retcode = shell.cmdloop()
-                print()
-                sys.exit(retcode)
-                break
-            except KeyboardInterrupt:  # CTRL+C pressed
-                # Ignore CTRL+C
-                print()
-                print()
