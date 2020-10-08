@@ -742,7 +742,7 @@ class AiiDANodeShell(cmd2.Cmd):
         first_level_matching = [
             folder + ('/' if folder else '') + obj.name + '/'
             for obj in self._current_node.list_objects(folder)
-            if obj.name.startswith(start) and obj.type == FileType.DIRECTORY
+            if obj.name.startswith(start) and obj.file_type == FileType.DIRECTORY
         ]
         # I go down one level more to have proper completion of folders
         # without being too expensive for arbitrary-length recursion
@@ -752,7 +752,7 @@ class AiiDANodeShell(cmd2.Cmd):
             matching.extend([
                 first_level_folder + '/' + obj.name + '/'
                 for obj in self._current_node.list_objects(first_level_folder)
-                if obj.type == FileType.DIRECTORY
+                if obj.file_type == FileType.DIRECTORY
             ])
 
         return self.delimiter_complete(text,
@@ -769,7 +769,7 @@ class AiiDANodeShell(cmd2.Cmd):
         folder, _, start = text.rpartition('/')
         first_level_matching = [
             folder + ('/' if folder else '') + obj.name +
-            ('/' if obj.type == FileType.DIRECTORY else '')
+            ('/' if obj.file_type == FileType.DIRECTORY else '')
             for obj in self._current_node.list_objects(folder)
             if obj.name.startswith(start)
         ]
@@ -779,7 +779,7 @@ class AiiDANodeShell(cmd2.Cmd):
             if first_level_object.endswith('/'):
                 matching.extend([
                     first_level_object + '/' + obj.name +
-                    ('/' if obj.type == FileType.DIRECTORY else '')
+                    ('/' if obj.file_type == FileType.DIRECTORY else '')
                     for obj in self._current_node.list_objects(
                         first_level_object)
                 ])
@@ -816,17 +816,17 @@ class AiiDANodeShell(cmd2.Cmd):
         with self.verdi_isolate():
             for obj in self._current_node.list_objects(arg.PATH):
                 if arg.long:
-                    click.secho('[{}] '.format(obj.type.name[0].lower()),
+                    click.secho('[{}] '.format(obj.file_type.name[0].lower()),
                                 fg='blue',
                                 bold=True,
                                 nl=False)
                 click.secho(obj.name,
                             nl=False,
-                            bold=(obj.type == FileType.DIRECTORY))
+                            bold=(obj.file_type == FileType.DIRECTORY))
                 if arg.no_trailing_slashes:
                     click.secho("")
                 else:
-                    if obj.type == FileType.DIRECTORY:
+                    if obj.file_type == FileType.DIRECTORY:
                         click.secho("/")
                     else:
                         click.secho("")
