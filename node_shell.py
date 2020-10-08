@@ -170,9 +170,9 @@ class NodeHist:
             if hist.linkinfo is not None:
                 # User unicode symbols for direction
                 if hist.linkinfo.direction == '<':
-                    link_direction = red('  🢁  ')
+                    link_direction = red('  ▲  ')
                 else:
-                    link_direction = green('  🢃  ')
+                    link_direction = green('  ▼  ')
                 link_line = '---  [{}] {}'.format(hist.linkinfo.label,
                                                   hist.linkinfo.type)
             else:
