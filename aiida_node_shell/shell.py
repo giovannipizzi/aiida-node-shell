@@ -254,7 +254,7 @@ class AiiDANodeShell(cmd2.Cmd):
 
         super().__init__(*args, use_ipython=True, **kwargs)
         if node_identifier:
-            self._set_current_node(node_identifier)
+            self.do_load(node_identifier)
         self.self_in_py = True
         self = cmd2.ansi.STYLE_TERMINAL
 
