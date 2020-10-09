@@ -17,7 +17,7 @@ def main():
     aiida.load_profile(parsed.profile)
 
     try:
-        sys.argv = sys.argv[1:]
+        sys.argv = ['aiida-node-shell']
         shell = AiiDANodeShell(
             node_identifier=parsed.node_identifier,
             startup_script=os.path.expanduser('~/.aiidashellrc'))
