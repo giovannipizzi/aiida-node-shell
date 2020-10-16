@@ -1,4 +1,4 @@
-"""Install the seekpath package."""
+"""Install the aiida-node-shell package."""
 import os
 import io
 
